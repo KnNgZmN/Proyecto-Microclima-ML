@@ -1,5 +1,12 @@
-# Modelo entrenado (binario grande, se regenera con train_model.py)
-models/model.pkl
+# Modelos y métricas
+models/*.pkl
+models/*.json
+
+# Datos generados
+data/raw/*.csv
+
+# Archivos de Streamlit
+.streamlit/
 
 # Python
 __pycache__/
