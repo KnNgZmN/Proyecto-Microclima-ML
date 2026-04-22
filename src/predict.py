@@ -4,9 +4,9 @@ import pandas as pd
 from datetime import datetime
 
 from feature_engineering import features_from_raw, FEATURE_COLS
+from localidades import LOCALIDADES
 
-# Ruta absoluta al modelo (funciona desde cualquier directorio)
-_base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_base_dir   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _model_path = os.path.join(_base_dir, "models", "model.pkl")
 
 _model = None
@@ -27,20 +27,21 @@ def predict(
     hora: int = None,
     mes: int = None,
     historia: pd.DataFrame = None,
+    localidad_id: int = 13,  # Teusaquillo — sede de despliegue universitario
 ) -> float:
     """
-    Predice la temperatura 30 minutos hacia adelante.
+    Predice la temperatura 30 minutos hacia adelante para una localidad de Bogotá.
 
     Parámetros
     ----------
-    temperatura : °C actual del sensor
-    humedad     : % HR actual del sensor
-    luz         : lux actual del sensor
-    ruido       : dB actual del sensor
-    hora        : hora del día (0-23); si None usa hora actual del sistema
-    mes         : mes (1-12); si None usa mes actual del sistema
-    historia    : DataFrame con lecturas recientes para calcular promedios
-                  reales (columnas: temperatura, humedad)
+    temperatura  : °C actual del sensor
+    humedad      : % HR actual del sensor
+    luz          : lux actual del sensor
+    ruido        : dB actual del sensor
+    hora         : hora del día (0-23); None → hora actual del sistema
+    mes          : mes (1-12); None → mes actual del sistema
+    historia     : DataFrame con lecturas recientes (columnas: temperatura, humedad)
+    localidad_id : ID de la localidad 1-20 (defecto: 17 = La Candelaria)
 
     Retorna
     -------
@@ -52,5 +53,19 @@ def predict(
     if mes is None:
         mes = now.month
 
-    X = features_from_raw(temperatura, humedad, luz, ruido, hora, mes, historia)
+    loc = LOCALIDADES.get(localidad_id, LOCALIDADES[13])
+
+    X = features_from_raw(
+        temperatura     = temperatura,
+        humedad         = humedad,
+        luz             = luz,
+        ruido           = ruido,
+        hora            = hora,
+        mes             = mes,
+        historia        = historia,
+        altitud         = loc["altitud"],
+        latitud         = loc["lat"],
+        longitud        = loc["lon"],
+        densidad_urbana = loc["densidad_urbana"],
+    )
     return float(_load_model().predict(X)[0])

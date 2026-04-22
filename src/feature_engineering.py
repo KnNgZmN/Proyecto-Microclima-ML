@@ -1,60 +1,109 @@
 import numpy as np
 import pandas as pd
 
-# Columnas que usa el modelo — importar desde aquí para mantener consistencia
+# Coordenadas y altitud del centro histórico de Bogotá (La Candelaria)
+# — valores por defecto cuando no se especifica localidad
+DEFAULT_LAT      = 4.5969
+DEFAULT_LON      = -74.0680
+DEFAULT_ALTITUD  = 2625.0
+DEFAULT_DENSIDAD = 0.70
+
 FEATURE_COLS = [
+    # Lecturas crudas del sensor
     "temperatura", "humedad", "luz", "ruido",
-    "hora_sin", "hora_cos",       # codificación cíclica de hora
-    "mes_sin", "mes_cos",         # codificación cíclica de mes
-    "es_dia",                     # flag binario día/noche
-    "temp_prom_30m",              # promedio móvil 30 min (3 lecturas)
-    "temp_prom_1h",               # promedio móvil 1 hora (6 lecturas)
-    "cambio_temp",                # delta temperatura 10 min
-    "tendencia_1h",               # delta temperatura 1 hora
-    "humedad_prom",               # promedio móvil humedad 30 min
-    "presion_vapor",              # presión de vapor (proxy físico)
+    # Codificación cíclica temporal
+    "hora_sin", "hora_cos",
+    "mes_sin",  "mes_cos",
+    # Contexto temporal
+    "es_dia",
+    # Promedios móviles de temperatura
+    "temp_prom_30m",
+    "temp_prom_1h",
+    # Tasas de cambio
+    "cambio_temp",
+    "tendencia_1h",
+    # Promedio móvil de humedad
+    "humedad_prom",
+    # Proxy físico de energía disponible en el aire
+    "presion_vapor",
+    # Geolocalización — diferencian microclima por localidad
+    "altitud",
+    "latitud",
+    "longitud",
+    "densidad_urbana",
 ]
 
 
 def create_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Agrega todas las columnas derivadas que usa el modelo.
+    Si el DataFrame tiene columna 'localidad_id', los promedios
+    móviles y deltas se calculan dentro de cada grupo para no
+    contaminar los límites entre localidades.
+    """
     df = df.copy()
 
     hora = df["timestamp"].dt.hour
-    mes = df["timestamp"].dt.month
+    mes  = df["timestamp"].dt.month
 
-    # Codificación cíclica — evita discontinuidad en 23→0 y en dic→ene
     df["hora_sin"] = np.sin(2 * np.pi * hora / 24)
     df["hora_cos"] = np.cos(2 * np.pi * hora / 24)
     df["mes_sin"]  = np.sin(2 * np.pi * mes / 12)
     df["mes_cos"]  = np.cos(2 * np.pi * mes / 12)
+    df["es_dia"]   = ((hora >= 6) & (hora <= 18)).astype(int)
 
-    df["es_dia"] = ((hora >= 6) & (hora <= 18)).astype(int)
+    if "localidad_id" in df.columns:
+        grp = df.groupby("localidad_id", sort=False)
+        df["temp_prom_30m"] = grp["temperatura"].transform(
+            lambda x: x.rolling(3, min_periods=1).mean()
+        )
+        df["temp_prom_1h"] = grp["temperatura"].transform(
+            lambda x: x.rolling(6, min_periods=1).mean()
+        )
+        df["cambio_temp"]  = grp["temperatura"].transform(
+            lambda x: x.diff().fillna(0)
+        )
+        df["tendencia_1h"] = grp["temperatura"].transform(
+            lambda x: x.diff(6).fillna(0)
+        )
+        df["humedad_prom"] = grp["humedad"].transform(
+            lambda x: x.rolling(3, min_periods=1).mean()
+        )
+    else:
+        df["temp_prom_30m"] = df["temperatura"].rolling(3, min_periods=1).mean()
+        df["temp_prom_1h"]  = df["temperatura"].rolling(6, min_periods=1).mean()
+        df["cambio_temp"]   = df["temperatura"].diff().fillna(0)
+        df["tendencia_1h"]  = df["temperatura"].diff(6).fillna(0)
+        df["humedad_prom"]  = df["humedad"].rolling(3, min_periods=1).mean()
 
-    # Promedios móviles de temperatura
-    df["temp_prom_30m"] = df["temperatura"].rolling(window=3, min_periods=1).mean()
-    df["temp_prom_1h"]  = df["temperatura"].rolling(window=6, min_periods=1).mean()
-
-    # Tasas de cambio
-    df["cambio_temp"]  = df["temperatura"].diff().fillna(0)
-    df["tendencia_1h"] = df["temperatura"].diff(6).fillna(0)
-
-    # Promedio móvil de humedad
-    df["humedad_prom"] = df["humedad"].rolling(window=3, min_periods=1).mean()
-
-    # Presión de vapor (fórmula Magnus aproximada) — magnitud física útil
     df["presion_vapor"] = (
         (df["humedad"] / 100)
         * 6.1078
         * np.exp(17.27 * df["temperatura"] / (237.3 + df["temperatura"]))
     ).round(4)
 
+    # Si las columnas de geolocalización no existen, usar defaults
+    for col, default in [
+        ("altitud",         DEFAULT_ALTITUD),
+        ("latitud",         DEFAULT_LAT),
+        ("longitud",        DEFAULT_LON),
+        ("densidad_urbana", DEFAULT_DENSIDAD),
+    ]:
+        if col not in df.columns:
+            df[col] = default
+
     return df
 
 
 def create_target(df: pd.DataFrame, steps: int = 3) -> pd.DataFrame:
-    """Agrega temp_futura (steps × 10 min hacia adelante) y elimina NaN."""
+    """Agrega temp_futura (steps × 10 min adelante) dentro de cada localidad."""
     df = df.copy()
-    df["temp_futura"] = df["temperatura"].shift(-steps)
+    if "localidad_id" in df.columns:
+        df["temp_futura"] = df.groupby("localidad_id")["temperatura"].transform(
+            lambda x: x.shift(-steps)
+        )
+    else:
+        df["temp_futura"] = df["temperatura"].shift(-steps)
     return df.dropna(subset=["temp_futura"])
 
 
@@ -66,14 +115,17 @@ def features_from_raw(
     hora: int,
     mes: int,
     historia: pd.DataFrame = None,
+    altitud: float = DEFAULT_ALTITUD,
+    latitud: float = DEFAULT_LAT,
+    longitud: float = DEFAULT_LON,
+    densidad_urbana: float = DEFAULT_DENSIDAD,
 ) -> pd.DataFrame:
     """
     Construye un DataFrame de una fila con todos los FEATURE_COLS
-    a partir de valores crudos del sensor.
+    a partir de valores crudos del sensor y metadatos de localidad.
 
-    Si se pasa `historia` (DataFrame con columnas temperatura/humedad
-    y al menos 6 filas recientes), se calculan los promedios móviles
-    reales. Sin historia, se usan el valor actual como proxy.
+    historia : DataFrame con columnas temperatura/humedad (últimas lecturas)
+               para calcular promedios móviles reales.
     """
     hora_sin = np.sin(2 * np.pi * hora / 24)
     hora_cos = np.cos(2 * np.pi * hora / 24)
@@ -102,19 +154,23 @@ def features_from_raw(
         humedad_prom  = humedad
 
     return pd.DataFrame([{
-        "temperatura":   temperatura,
-        "humedad":       humedad,
-        "luz":           luz,
-        "ruido":         ruido,
-        "hora_sin":      hora_sin,
-        "hora_cos":      hora_cos,
-        "mes_sin":       mes_sin,
-        "mes_cos":       mes_cos,
-        "es_dia":        es_dia,
-        "temp_prom_30m": temp_prom_30m,
-        "temp_prom_1h":  temp_prom_1h,
-        "cambio_temp":   cambio_temp,
-        "tendencia_1h":  tendencia_1h,
-        "humedad_prom":  humedad_prom,
-        "presion_vapor": presion_vapor,
+        "temperatura":    temperatura,
+        "humedad":        humedad,
+        "luz":            luz,
+        "ruido":          ruido,
+        "hora_sin":       hora_sin,
+        "hora_cos":       hora_cos,
+        "mes_sin":        mes_sin,
+        "mes_cos":        mes_cos,
+        "es_dia":         es_dia,
+        "temp_prom_30m":  temp_prom_30m,
+        "temp_prom_1h":   temp_prom_1h,
+        "cambio_temp":    cambio_temp,
+        "tendencia_1h":   tendencia_1h,
+        "humedad_prom":   humedad_prom,
+        "presion_vapor":  presion_vapor,
+        "altitud":        altitud,
+        "latitud":        latitud,
+        "longitud":       longitud,
+        "densidad_urbana": densidad_urbana,
     }])[FEATURE_COLS]
