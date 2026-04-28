@@ -19,6 +19,7 @@ Uso:
 """
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -43,12 +44,34 @@ RANGOS = {
     "temperatura": (-2.0, 30.0),
     "humedad":     (30.0, 100.0),
     "luz":         (0.0,  1100.0),
-    "ruido":       (20.0, 110.0),
+    "ruido":       (19.0, 110.0),
 }
 
 COLUMNAS = ["timestamp", "localidad_id", "localidad", "latitud", "longitud",
             "altitud", "densidad_urbana", "temperatura", "humedad", "luz", "ruido"]
 HISTORIA_MAX = 20   # filas recientes mantenidas en memoria para promedios
+LIVE_PATH = os.path.join(base_dir, "data", "live", "latest.json")
+
+
+# -------------------------------------------------------
+# Archivo compartido con Streamlit (última lectura en vivo)
+# -------------------------------------------------------
+def actualizar_live(ts: datetime, temp: float, hum: float, luz: float, ruido: float,
+                    pred, loc_id: int, loc_info: dict):
+    """Escribe la lectura más reciente en JSON para que Streamlit la muestre en vivo."""
+    os.makedirs(os.path.dirname(LIVE_PATH), exist_ok=True)
+    datos = {
+        "timestamp": ts.strftime("%Y-%m-%d %H:%M:%S"),
+        "localidad_id": loc_id,
+        "localidad": loc_info["nombre"],
+        "temperatura": round(temp, 2),
+        "humedad": round(hum, 1),
+        "luz": int(luz),
+        "ruido": int(ruido),
+        "prediccion": round(pred, 2) if pred is not None else None,
+    }
+    with open(LIVE_PATH, "w", encoding="utf-8") as f:
+        json.dump(datos, f, indent=2)
 
 
 # -------------------------------------------------------
@@ -177,11 +200,13 @@ def leer_serial(port: str, baud: int, intervalo: int, con_prediccion: bool,
                 f"T={temp:.1f}°C  H={hum:.1f}%  Luz={luz:.0f}lx  Ruido={ruido:.0f}dB"
             )
 
+            pred = None
             if con_prediccion:
                 pred = predecir_en_vivo(temp, hum, luz, ruido, hora, mes, historia, loc_info)
                 if pred is not None:
                     estado += f"  →  T+30min={pred:.2f}°C"
 
+            actualizar_live(ts, temp, hum, luz, ruido, pred, loc_id, loc_info)
             print(estado)
             time.sleep(max(0, intervalo - 0.1))
 
@@ -238,11 +263,13 @@ def simular(intervalo: int, con_prediccion: bool, n_lecturas: int,
             f"T={temp:.1f}°C  H={hum:.1f}%  Luz={luz}lx  Ruido={ruido}dB"
         )
 
+        pred = None
         if con_prediccion:
             pred = predecir_en_vivo(temp, hum, luz, ruido, hora, mes, historia, loc_info)
             if pred is not None:
                 estado += f"  →  T+30min={pred:.2f}°C"
 
+        actualizar_live(ts, temp, hum, luz, ruido, pred, loc_id, loc_info)
         print(estado)
         time.sleep(intervalo)
 

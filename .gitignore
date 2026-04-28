@@ -39,3 +39,6 @@ desktop.ini
 # Logs y temporales
 *.log
 *.tmp
+
+#Exposicion
+contexto_exposicion.md
