@@ -4,6 +4,7 @@ models/*.json
 
 # Datos generados
 data/raw/*.csv
+data/live/latest.json
 
 # Archivos de Streamlit
 .streamlit/
