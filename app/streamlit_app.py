@@ -33,6 +33,13 @@ def cargar_datos():
     return clean_data(df)
 
 
+@st.cache_data(ttl=30)
+def get_csv_bytes():
+    df = load_data(DATA_PATH)
+    df = clean_data(df)
+    return df.to_csv(index=False).encode("utf-8")
+
+
 @st.cache_resource
 def cargar_modelo():
     return joblib.load(MODEL_PATH)
@@ -52,6 +59,22 @@ def leer_live() -> dict | None:
 def segundos_desde(ts_str: str) -> int:
     ts = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
     return int((datetime.now() - ts).total_seconds())
+
+
+def listar_puertos_com() -> list[str]:
+    try:
+        import serial.tools.list_ports
+        return [p.device for p in serial.tools.list_ports.comports()]
+    except Exception:
+        return []
+
+
+def escalar_luz_interior(luz: float, hora: int) -> float:
+    """Convierte lux de entorno cerrado al rango exterior que espera el modelo.
+    Solo escala durante horas diurnas (6-18); de noche los valores ya coinciden."""
+    if 6 <= hora <= 18:
+        return min(1000.0, luz * 3.5)
+    return luz
 
 
 # ---------------------------------------------------------------
@@ -216,7 +239,7 @@ with tab_datos:
             st.subheader("Últimas lecturas")
             cols_show = [c for c in ["timestamp", "localidad", "temperatura", "humedad", "luz", "ruido"]
                          if c in df_loc.columns]
-            st.dataframe(df_loc.tail(12)[cols_show], use_container_width=True)
+            st.dataframe(df_loc.tail(12)[cols_show].iloc[::-1], use_container_width=True)
 
             st.subheader("Temperatura — últimas 24 horas")
             ultimas = df_loc.tail(144)
@@ -334,7 +357,7 @@ with tab_pred:
 
         if len(st.session_state.historia) > 0:
             with st.expander("Ver historial de la sesión"):
-                st.dataframe(st.session_state.historia, use_container_width=True)
+                st.dataframe(st.session_state.historia.iloc[::-1], use_container_width=True)
             if st.button("Limpiar historial"):
                 st.session_state.historia = pd.DataFrame(columns=["temperatura", "humedad"])
 
@@ -432,9 +455,17 @@ with tab_arduino:
     # ── Panel de control ────────────────────────────────────────
     st.subheader("🎮 Control del colector")
 
-    ca1, ca2, ca3 = st.columns(3)
+    # ── Detección de puertos disponibles ────────────────────────
+    puertos_disponibles = listar_puertos_com()
+    if puertos_disponibles:
+        st.caption(f"🔍 Puertos detectados: **{', '.join(puertos_disponibles)}**")
+    else:
+        st.caption("🔍 No se detectaron puertos COM. Conecta el Arduino antes de iniciar.")
+
+    ca1, ca2, ca3, ca4 = st.columns([2, 2, 1, 2])
     with ca1:
-        ard_port = st.text_input("Puerto serial", value="COM3", key="ard_port")
+        puerto_default = puertos_disponibles[0] if puertos_disponibles else "COM3"
+        ard_port = st.text_input("Puerto serial", value=puerto_default, key="ard_port")
     with ca2:
         ard_loc_nombre = st.selectbox(
             "Localidad del Arduino",
@@ -445,9 +476,20 @@ with tab_arduino:
         ard_loc_id = _NOMBRE_A_ID[ard_loc_nombre]
     with ca3:
         ard_baud = st.selectbox("Baud rate", [9600, 115200], key="ard_baud")
+    with ca4:
+        st.markdown("<br>", unsafe_allow_html=True)
+        entorno_interior = st.toggle(
+            "🏫 Entorno interior",
+            value=False,
+            key="entorno_interior",
+            help="Activa durante presentaciones en salón. Escala la luz del sensor "
+                 "al rango exterior que espera el modelo, sin afectar los valores mostrados.",
+        )
 
     if "arduino_proc" not in st.session_state:
         st.session_state.arduino_proc = None
+    if "arduino_error" not in st.session_state:
+        st.session_state.arduino_error = None
 
     proc = st.session_state.arduino_proc
     proc_running = proc is not None and proc.poll() is None
@@ -457,18 +499,30 @@ with tab_arduino:
 
     with cb1:
         if st.button("▶ Iniciar Arduino real", disabled=proc_running, use_container_width=True):
-            cmd = [
-                sys.executable, _collector,
-                "--port", ard_port,
-                "--baud", str(ard_baud),
-                "--localidad", str(ard_loc_id),
-                "--predict",
-            ]
-            st.session_state.arduino_proc = subprocess.Popen(cmd)
+            if ard_port not in puertos_disponibles and puertos_disponibles:
+                st.session_state.arduino_error = (
+                    f"Puerto **{ard_port}** no detectado. "
+                    f"Puertos disponibles: {', '.join(puertos_disponibles)}"
+                )
+            else:
+                st.session_state.arduino_error = None
+                cmd = [
+                    sys.executable, _collector,
+                    "--port", ard_port,
+                    "--baud", str(ard_baud),
+                    "--localidad", str(ard_loc_id),
+                    "--predict",
+                ]
+                st.session_state.arduino_proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.DEVNULL,  # output normal descartado — se usa latest.json
+                    stderr=subprocess.PIPE,
+                )
             st.rerun()
 
     with cb2:
         if st.button("🧪 Iniciar simulación", disabled=proc_running, use_container_width=True):
+            st.session_state.arduino_error = None
             cmd = [
                 sys.executable, _collector,
                 "--simulate",
@@ -477,21 +531,47 @@ with tab_arduino:
                 "--localidad", str(ard_loc_id),
                 "--predict",
             ]
-            st.session_state.arduino_proc = subprocess.Popen(cmd)
+            st.session_state.arduino_proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,  # output normal descartado — se usa latest.json
+                stderr=subprocess.PIPE,
+            )
             st.rerun()
 
     with cb3:
         if st.button("⏹ Detener", disabled=not proc_running, use_container_width=True):
             st.session_state.arduino_proc.terminate()
             st.session_state.arduino_proc = None
+            st.session_state.arduino_error = None
             st.rerun()
 
+    # ── Estado del proceso ───────────────────────────────────────
     if proc_running:
         st.success(f"🟢 Colector en ejecución (PID {proc.pid}) — localidad: **{ard_loc_nombre}**")
+        st.session_state.arduino_error = None
     elif proc is not None and proc.poll() is not None:
-        st.error(f"🔴 El colector terminó (código {proc.poll()}). Revisa el puerto o reinicia.")
+        exit_code = proc.poll()
+        try:
+            stderr_txt = proc.stderr.read().decode("utf-8", errors="ignore").strip()
+        except Exception:
+            stderr_txt = ""
+        if "No se pudo abrir el puerto" in stderr_txt or "SerialException" in stderr_txt:
+            st.session_state.arduino_error = (
+                f"No se pudo abrir **{ard_port}**. "
+                "Verifica que el Arduino esté enchufado y el puerto sea correcto."
+            )
+        elif stderr_txt:
+            st.session_state.arduino_error = f"Error (código {exit_code}):\n\n```\n{stderr_txt}\n```"
+        else:
+            st.session_state.arduino_error = (
+                f"El colector terminó inesperadamente (código {exit_code}). "
+                "Revisa el puerto o vuelve a intentarlo."
+            )
         st.session_state.arduino_proc = None
-    else:
+
+    if st.session_state.arduino_error:
+        st.error(f"🔴 {st.session_state.arduino_error}")
+    elif not proc_running:
         st.info("🔌 Colector detenido. Inicia Arduino real o la simulación.")
 
     st.divider()
@@ -512,10 +592,40 @@ with tab_arduino:
         lv1, lv2, lv3, lv4 = st.columns(4)
         lv1.metric("🌡️ Temperatura", f"{live['temperatura']:.2f} °C")
         lv2.metric("💧 Humedad",     f"{live['humedad']:.1f} %")
-        lv3.metric("☀️ Luz",         f"{live['luz']} lux")
-        lv4.metric("🔊 Ruido",       f"{live['ruido']} dB")
+        hora_live = datetime.strptime(live["timestamp"], "%Y-%m-%d %H:%M:%S").hour
+        luz_real  = live["luz"]
+        luz_modelo = escalar_luz_interior(luz_real, hora_live) if entorno_interior else luz_real
+        lv3.metric(
+            "☀️ Luz",
+            f"{luz_real} lux",
+            delta=f"→ {luz_modelo:.0f} (modelo)" if entorno_interior and luz_modelo != luz_real else None,
+        )
+        lv4.metric("🔊 Ruido", f"{live['ruido']} dB")
 
-        if live.get("prediccion") is not None:
+        # Recomputar predicción con luz escalada si entorno interior está activo
+        if entorno_interior and os.path.exists(MODEL_PATH):
+            _loc_live  = LOCALIDADES[live["localidad_id"]]
+            _mes_live  = datetime.strptime(live["timestamp"], "%Y-%m-%d %H:%M:%S").month
+            X_int = features_from_raw(
+                temperatura     = live["temperatura"],
+                humedad         = live["humedad"],
+                luz             = luz_modelo,
+                ruido           = live["ruido"],
+                hora            = hora_live,
+                mes             = _mes_live,
+                historia        = None,
+                altitud         = _loc_live["altitud"],
+                latitud         = _loc_live["lat"],
+                longitud        = _loc_live["lon"],
+                densidad_urbana = _loc_live["densidad_urbana"],
+            )
+            pred_int   = float(cargar_modelo().predict(X_int)[0])
+            delta_int  = pred_int - live["temperatura"]
+            st.info(
+                f"🔮 Predicción T+30 min (interior → {live['localidad']}): **{pred_int:.2f} °C**  "
+                f"({'↑' if delta_int >= 0 else '↓'} {abs(delta_int):.2f} °C)"
+            )
+        elif live.get("prediccion") is not None:
             delta_p = live["prediccion"] - live["temperatura"]
             st.info(
                 f"🔮 Predicción T+30 min: **{live['prediccion']:.2f} °C**  "
@@ -563,7 +673,7 @@ with tab_arduino:
 
             cols_show = [c for c in ["timestamp", "localidad", "temperatura", "humedad", "luz", "ruido"]
                          if c in df_reciente.columns]
-            st.dataframe(df_reciente.tail(10)[cols_show], use_container_width=True)
+            st.dataframe(df_reciente.tail(10)[cols_show].iloc[::-1], use_container_width=True)
         else:
             st.info(f"No hay registros para {filter_nombre} aún.")
 
@@ -585,6 +695,9 @@ with tab_arduino:
 
         if "pred_arduino" not in st.session_state:
             st.session_state.pred_arduino = None
+
+        if entorno_interior:
+            st.caption("🏫 Entorno interior activo — la luz se escala al rango exterior antes de predecir.")
 
         with st.form("pred_manual_arduino"):
             pm1, pm2 = st.columns(2)
@@ -616,10 +729,12 @@ with tab_arduino:
                 if "localidad_id" in _df_h.columns:
                     _hist = _df_h[_df_h["localidad_id"] == pm_lid][["temperatura", "humedad"]].tail(20)
 
+            pm_luz_modelo = escalar_luz_interior(pm_luz, pm_hora) if entorno_interior else pm_luz
+
             X_pm = features_from_raw(
                 temperatura     = pm_temp,
                 humedad         = pm_hum,
-                luz             = pm_luz,
+                luz             = pm_luz_modelo,
                 ruido           = pm_ruido,
                 hora            = pm_hora,
                 mes             = pm_mes,
@@ -658,13 +773,13 @@ with tab_arduino:
             "Rango de fechas",
             f"{(df_dl['timestamp'].max() - df_dl['timestamp'].min()).days} días",
         )
-        csv_bytes = df_dl.to_csv(index=False).encode("utf-8")
         st.download_button(
             "⬇ Descargar dataset (CSV)",
-            data=csv_bytes,
+            data=get_csv_bytes(),
             file_name="microclima_bogota.csv",
             mime="text/csv",
             use_container_width=True,
+            key="download_csv",
         )
     else:
         st.info("Dataset no disponible aún.")

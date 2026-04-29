@@ -82,7 +82,7 @@ def validar_lectura(temp, hum, luz, ruido) -> bool:
     for col, val in valores.items():
         lo, hi = RANGOS[col]
         if not (lo <= val <= hi):
-            print(f"  ⚠️  Valor fuera de rango — {col}: {val} (esperado {lo}–{hi})")
+            print(f"  [WARN] Valor fuera de rango - {col}: {val} (esperado {lo}-{hi})")
             return False
     return True
 
@@ -117,7 +117,7 @@ def predecir_en_vivo(temp, hum, luz, ruido, hora, mes, historia, loc_info: dict)
         import joblib
         model_path = os.path.join(base_dir, "models", "model.pkl")
         if not os.path.exists(model_path):
-            print("  ⚠️  Modelo no encontrado. Ejecuta train_model.py primero.")
+            print("  [WARN] Modelo no encontrado. Ejecuta train_model.py primero.")
             return None
         _modelo = joblib.load(model_path)
 
@@ -140,19 +140,19 @@ def leer_serial(port: str, baud: int, intervalo: int, con_prediccion: bool,
     try:
         import serial
     except ImportError:
-        print("❌  Instala pyserial:  pip install pyserial")
+        print("[ERROR] Instala pyserial:  pip install pyserial")
         sys.exit(1)
 
-    print(f"🔌 Conectando a {port} @ {baud} baud...")
-    print(f"📍 Localidad: {loc_info['nombre']} (ID={loc_id}, {loc_info['altitud']} m)")
+    print(f"[INFO] Conectando a {port} @ {baud} baud...")
+    print(f"[INFO] Localidad: {loc_info['nombre']} (ID={loc_id}, {loc_info['altitud']} m)")
     try:
         ser = serial.Serial(port, baud, timeout=2)
     except serial.SerialException as e:
-        print(f"❌  No se pudo abrir el puerto: {e}")
+        print(f"[ERROR] No se pudo abrir el puerto: {e}")
         sys.exit(1)
 
-    print(f"✅ Conectado. Guardando en: {DATA_PATH}")
-    print("   Ctrl+C para detener.\n")
+    print(f"[OK] Conectado. Guardando en: {DATA_PATH}")
+    print("     Ctrl+C para detener.\n")
 
     historia = pd.DataFrame(columns=["temperatura", "humedad"])
     errores_consecutivos = 0
@@ -164,24 +164,50 @@ def leer_serial(port: str, baud: int, intervalo: int, con_prediccion: bool,
                 continue
 
             partes = linea.split(",")
-            if len(partes) != 4:
-                print(f"  ↩  Formato incorrecto: '{linea}'")
+            n = len(partes)
+            if n < 2:
+                print(f"  [SKIP] Linea invalida (menos de 2 valores): '{linea}'")
                 errores_consecutivos += 1
                 if errores_consecutivos >= 10:
-                    print("❌  Demasiados errores consecutivos. Verifica el sketch.")
+                    print("[ERROR] Demasiados errores consecutivos. Verifica el sketch.")
+                    print(f"[INFO]  Formato esperado: temp,hum,luz,ruido  (ej: 18.50,72.30,850,45)")
                     break
                 continue
 
             errores_consecutivos = 0
 
             try:
-                temp  = float(partes[0])
-                hum   = float(partes[1])
-                luz   = float(partes[2])
-                ruido = float(partes[3])
+                vals = [float(p) for p in partes[:4]]
             except ValueError:
-                print(f"  ↩  No se pudo parsear: '{linea}'")
+                print(f"  [SKIP] No se pudo parsear: '{linea}'")
                 continue
+
+            if n >= 4:
+                temp, hum, luz, ruido = vals[0], vals[1], vals[2], vals[3]
+            elif n == 3:
+                # 3 valores: temp, hum, luz  — ruido por default
+                temp, hum, luz, ruido = vals[0], vals[1], vals[2], 45.0
+                print(f"  [INFO] 3 valores recibidos (temp,hum,luz). Ruido default=45")
+            else:
+                # 2 valores: detectar si son temp,hum o luz,ruido segun rangos
+                v0, v1 = vals[0], vals[1]
+                temp_ok = -2.0 <= v0 <= 30.0 and 30.0 <= v1 <= 100.0
+                luz_ok  =  0.0 <= v0 <= 1100.0 and 19.0 <= v1 <= 110.0
+                if temp_ok:
+                    temp, hum, luz, ruido = v0, v1, 600.0, 45.0
+                    print(f"  [INFO] 2 valores -> temp={temp}C, hum={hum}%. "
+                          f"Luz default=600, ruido default=45")
+                elif luz_ok:
+                    # Solo sensores analogicos (LDR + microfono), sin DHT
+                    from localidades import ALT_REFERENCIA, LAPSE_RATE
+                    luz, ruido = v0, v1
+                    temp = round(14.0 + (ALT_REFERENCIA - loc_info["altitud"]) * LAPSE_RATE, 1)
+                    hum  = 72.0
+                    print(f"  [INFO] 2 valores -> luz={luz:.0f}, ruido={ruido:.0f}. "
+                          f"Sin DHT: temp estimada por altitud={temp}C, hum default=72%")
+                else:
+                    print(f"  [SKIP] Valores fuera de rango conocido: '{linea}'")
+                    continue
 
             if not validar_lectura(temp, hum, luz, ruido):
                 continue
@@ -197,21 +223,21 @@ def leer_serial(port: str, baud: int, intervalo: int, con_prediccion: bool,
 
             estado = (
                 f"[{ts.strftime('%H:%M:%S')}] "
-                f"T={temp:.1f}°C  H={hum:.1f}%  Luz={luz:.0f}lx  Ruido={ruido:.0f}dB"
+                f"T={temp:.1f}C  H={hum:.1f}%  Luz={luz:.0f}lx  Ruido={ruido:.0f}dB"
             )
 
             pred = None
             if con_prediccion:
                 pred = predecir_en_vivo(temp, hum, luz, ruido, hora, mes, historia, loc_info)
                 if pred is not None:
-                    estado += f"  →  T+30min={pred:.2f}°C"
+                    estado += f"  -> T+30min={pred:.2f}C"
 
             actualizar_live(ts, temp, hum, luz, ruido, pred, loc_id, loc_info)
             print(estado)
             time.sleep(max(0, intervalo - 0.1))
 
     except KeyboardInterrupt:
-        print("\n🛑 Recolección detenida.")
+        print("\n[STOP] Recoleccion detenida.")
     finally:
         ser.close()
 
@@ -226,9 +252,9 @@ def simular(intervalo: int, con_prediccion: bool, n_lecturas: int,
     alt_corr = (ALT_REFERENCIA - loc_info["altitud"]) * LAPSE_RATE
     densidad = loc_info["densidad_urbana"]
 
-    print(f"🧪 Modo simulación — {n_lecturas} lecturas cada {intervalo}s")
-    print(f"📍 Localidad: {loc_info['nombre']} (alt={loc_info['altitud']}m, densidad={densidad:.0%})")
-    print(f"   Guardando en: {DATA_PATH}\n")
+    print(f"[SIM] Modo simulacion - {n_lecturas} lecturas cada {intervalo}s")
+    print(f"[SIM] Localidad: {loc_info['nombre']} (alt={loc_info['altitud']}m, densidad={densidad:.0%})")
+    print(f"      Guardando en: {DATA_PATH}\n")
 
     historia = pd.DataFrame(columns=["temperatura", "humedad"])
 
@@ -260,20 +286,20 @@ def simular(intervalo: int, con_prediccion: bool, n_lecturas: int,
 
         estado = (
             f"[{ts.strftime('%H:%M:%S')}] "
-            f"T={temp:.1f}°C  H={hum:.1f}%  Luz={luz}lx  Ruido={ruido}dB"
+            f"T={temp:.1f}C  H={hum:.1f}%  Luz={luz}lx  Ruido={ruido}dB"
         )
 
         pred = None
         if con_prediccion:
             pred = predecir_en_vivo(temp, hum, luz, ruido, hora, mes, historia, loc_info)
             if pred is not None:
-                estado += f"  →  T+30min={pred:.2f}°C"
+                estado += f"  -> T+30min={pred:.2f}C"
 
         actualizar_live(ts, temp, hum, luz, ruido, pred, loc_id, loc_info)
         print(estado)
         time.sleep(intervalo)
 
-    print("\n✅ Simulación terminada.")
+    print("\n[OK] Simulacion terminada.")
 
 
 # -------------------------------------------------------
@@ -351,7 +377,7 @@ if __name__ == "__main__":
     loc_id   = args.localidad
     loc_info = LOCALIDADES.get(loc_id)
     if loc_info is None:
-        print(f"❌  Localidad {loc_id} no existe. Valores válidos: 1-20.")
+        print(f"[ERROR] Localidad {loc_id} no existe. Valores validos: 1-20.")
         sys.exit(1)
 
     os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True)
