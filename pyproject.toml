@@ -1,0 +1,44 @@
+[tool.pytest.ini_options]
+# src/ no es un paquete instalable y los módulos se importan de forma plana
+# (ej. "from feature_engineering import ..."), por lo que se agrega al sys.path.
+pythonpath = ["src"]
+testpaths  = ["tests"]
+addopts    = "-q --strict-markers"
+
+[tool.coverage.run]
+# Cobertura de ramas además de líneas — métrica exigida por la sección 4
+# de la Guía de Métricas (JaCoCo/Istanbul reportan lines + branches).
+branch = true
+source = ["src"]
+
+# --- Exclusiones de alcance (justificadas en docs/cobertura-alcance.md) ---
+omit = [
+    # Scripts de ejecución: todo su cuerpo corre a nivel de módulo, por lo que
+    # importarlos desde una prueba dispararía la generación del dataset, el
+    # entrenamiento del modelo o la apertura de ventanas de matplotlib.
+    "src/generate_dataset.py",
+    "src/train_model.py",
+    "src/visualization.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+precision    = 2
+
+# Umbral mínimo: falla la build si la cobertura cae por debajo.
+# Línea base medida el 2026-07-28: 57.72 %. Subir este valor a medida que
+# avance el módulo (meta declarada: 80 %).
+fail_under = 55
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+[tool.coverage.xml]
+# Formato consumido por Codecov / Coveralls / SonarCloud
+output = "coverage.xml"

@@ -41,5 +41,12 @@ desktop.ini
 *.log
 *.tmp
 
+# Pruebas y cobertura
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
 #Exposicion
 contexto_exposicion.md
