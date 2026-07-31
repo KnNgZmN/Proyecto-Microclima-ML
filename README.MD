@@ -2,6 +2,10 @@
 
 Sistema de predicción de temperatura a **30 minutos** para las **20 localidades de Bogotá D.C.**, combinando sensores ambientales IoT (Arduino) con Machine Learning calibrado sobre física real del clima bogotano.
 
+[![Pruebas y Cobertura](https://github.com/KnNgZmN/Proyecto-Microclima-ML/actions/workflows/tests.yml/badge.svg)](https://github.com/KnNgZmN/Proyecto-Microclima-ML/actions/workflows/tests.yml)
+![Cobertura](https://img.shields.io/badge/cobertura-57.72%25-yellow)
+![Pruebas](https://img.shields.io/badge/pruebas-217%20passed-brightgreen)
+
 ---
 
 ## Índice
@@ -32,6 +36,10 @@ Sistema de predicción de temperatura a **30 minutos** para las **20 localidades
 21. [Paso 8 — Simular el Arduino (sin hardware)](#paso-8--simular-el-arduino-sin-hardware)
 22. [Paso 9 — Conectar Arduino real (cuando esté disponible)](#paso-9--conectar-arduino-real-cuando-esté-disponible)
 23. [Solución de problemas frecuentes](#23-solución-de-problemas-frecuentes)
+
+### Parte 3 — Calidad y métricas del software (8.º semestre)
+24. [Pruebas automatizadas y cobertura](#24-pruebas-automatizadas-y-cobertura)
+25. [Integración continua (GitHub Actions)](#25-integración-continua-github-actions)
 
 ---
 
@@ -539,7 +547,24 @@ ProyectoMicroclima/
 ├── app/
 │   └── streamlit_app.py          # Interfaz web interactiva (4 pestañas)
 │
-├── requirements.txt
+├── tests/                        # Suite de pruebas — 217 casos
+│   ├── conftest.py               # Fixtures compartidas y doble del modelo
+│   ├── test_data_processing.py   # Saneamiento e interpolación
+│   ├── test_feature_engineering.py  # Features, ciclos y aislamiento por localidad
+│   ├── test_localidades.py       # Integridad del catálogo de 20 localidades
+│   ├── test_predict.py           # Inferencia con modelo simulado
+│   └── test_arduino_collector.py # Validación de rangos y persistencia
+│
+├── docs/
+│   └── cobertura-alcance.md      # Alcance de la medición y exclusiones
+│
+├── .github/
+│   └── workflows/
+│       └── tests.yml             # CI: pytest + cobertura en cada push y PR
+│
+├── pyproject.toml                # Configuración de pytest y coverage
+├── requirements.txt              # Dependencias de ejecución
+├── requirements-dev.txt          # Dependencias de desarrollo y pruebas
 ├── CONTEXTO_EXPOSICION.md        # Glosario técnico para la exposición
 └── README.MD                     # Este archivo
 ```
@@ -578,6 +603,20 @@ ProyectoMicroclima/
 | `matplotlib` | Gráficas de diagnóstico |
 | `streamlit` | Interfaz web |
 | `pyserial` | Comunicación con Arduino (solo integración real) |
+
+### Dependencias de desarrollo (`requirements-dev.txt`)
+
+Solo hacen falta para ejecutar las pruebas. No son necesarias para usar la aplicación.
+
+| Paquete | Uso |
+|---------|-----|
+| `pytest` | Ejecución de la suite de pruebas |
+| `pytest-cov` | Integración de la medición de cobertura con pytest |
+| `coverage[toml]` | Motor de cobertura de líneas y ramas |
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+```
 
 ---
 
@@ -929,5 +968,126 @@ La app se refresca cada 5 segundos. Los resultados de predicción (Tab 2 y Tab 4
 
 ---
 
+# Parte 3 — Calidad y métricas del software (8.º semestre)
+
+---
+
+## 24. Pruebas automatizadas y cobertura
+
+Esta parte corresponde al módulo de **Calidad y Métricas del Software**, que retoma este mismo proyecto. De las siete áreas de la *Guía Integral de Métricas de Ingeniería y Herramientas*, el equipo escogió la **sección 4 — Cobertura de Pruebas**.
+
+### ¿Qué es la cobertura de pruebas?
+
+Es el porcentaje de código fuente que se ejecuta cuando corre la suite de pruebas automatizadas. Si una línea nunca se ejecuta durante las pruebas, nadie está verificando que funcione: puede romperse sin que nada avise.
+
+Se miden dos cosas distintas:
+
+| Métrica | Qué responde |
+|---------|--------------|
+| **Cobertura de líneas** | ¿Se ejecutó esta línea alguna vez? |
+| **Cobertura de ramas** | En un `if`, ¿se probaron **ambos** caminos (verdadero y falso)? |
+
+La cobertura de ramas es la más estricta y es la que exige la guía. Un `if` cuyo `else` nunca se prueba cuenta como línea cubierta pero rama incompleta.
+
+### Herramientas utilizadas
+
+La guía de la docente lista JaCoCo (Java) e Istanbul/c8 (JavaScript), que no aplican a un proyecto Python. Las equivalencias adoptadas son:
+
+| Herramienta de la guía | Equivalente adoptado | Función |
+|------------------------|----------------------|---------|
+| JaCoCo / Istanbul | `coverage.py` + `pytest-cov` | Motor de medición de líneas y ramas |
+| Codecov | Codecov | Histórico y *diff coverage* de cada PR |
+
+### Cómo ejecutar las pruebas
+
+```bash
+# Instalar las dependencias de desarrollo (solo la primera vez)
+pip install -r requirements.txt -r requirements-dev.txt
+
+# Ejecutar toda la suite
+pytest
+
+# Ejecutar con reporte de cobertura en la terminal
+pytest --cov --cov-branch --cov-report=term-missing
+
+# Generar el reporte HTML navegable
+pytest --cov --cov-report=html
+```
+
+El reporte HTML queda en `htmlcov/index.html`. Ábrelo en el navegador: muestra el código fuente coloreado, en verde lo cubierto y en rojo lo que ninguna prueba ejecuta.
+
+Las pruebas **no dependen del dataset ni del modelo entrenado**. `data/raw/data.csv` y `models/model.pkl` se generan localmente y están en `.gitignore`, así que no existen en el servidor de integración continua. La suite sustituye el modelo por un doble de prueba y redirige las escrituras a directorios temporales, por lo que corre en una copia recién clonada del repositorio.
+
+### Resultados actuales
+
+Línea base medida **antes** de escribir cualquier prueba, para poder documentar el antes y el después:
+
+| Indicador | Antes | Ahora |
+|-----------|-------|-------|
+| Pruebas automatizadas | 0 | **217** |
+| Cobertura total (líneas + ramas) | 0.00 % | **57.72 %** |
+| Cobertura del núcleo lógico | 0.00 % | **100.00 %** |
+| Sentencias sin cubrir | 266 | 110 |
+
+Desglose por módulo:
+
+| Módulo | Sentencias | Sin cubrir | Cobertura |
+|--------|-----------:|-----------:|----------:|
+| `src/data_processing.py` | 18 | 0 | **100.00 %** |
+| `src/feature_engineering.py` | 60 | 0 | **100.00 %** |
+| `src/localidades.py` | 4 | 0 | **100.00 %** |
+| `src/predict.py` | 22 | 0 | **100.00 %** |
+| `src/arduino_collector.py` | 162 | 110 | 30.81 % |
+| **TOTAL** | **266** | **110** | **57.72 %** |
+
+### Qué cubre cada archivo de pruebas
+
+| Archivo | Casos | Qué verifica |
+|---------|------:|--------------|
+| `test_localidades.py` | 107 | Que las 20 localidades tengan todos sus campos, coordenadas dentro de Bogotá, densidad normalizada y altitudes plausibles |
+| `test_feature_engineering.py` | 39 | Las 19 features, la codificación cíclica de hora y mes, la fórmula de presión de vapor y que los promedios móviles **no se contaminen entre localidades** |
+| `test_predict.py` | 31 | La inferencia para las 20 localidades, el fallback ante una localidad desconocida y la carga perezosa del modelo |
+| `test_arduino_collector.py` | 25 | La validación de rangos del sensor y la escritura correcta del CSV y del JSON en vivo |
+| `test_data_processing.py` | 15 | La detección de valores fuera de rango y su interpolación lineal |
+
+### Alcance de la medición y deuda conocida
+
+El 30.81 % de `arduino_collector.py` no es un descuido. Las 110 sentencias sin cubrir son casi todas `leer_serial()` y `simular()`, que abren un puerto serie físico y ejecutan bucles indefinidos. **No se excluyeron de la medición**: se dejan contabilizadas a propósito para que la deuda quede visible en la métrica en lugar de esconderse tras una exclusión.
+
+Sí están excluidos tres scripts (`generate_dataset.py`, `train_model.py` y `visualization.py`) porque ejecutan todo su contenido al importarse: no tienen la guarda `if __name__ == "__main__"`. Importarlos desde una prueba dispararía la generación del dataset completo, el entrenamiento del modelo o la apertura de ventanas de matplotlib. Es un hallazgo de testabilidad documentado como deuda técnica a refactorizar.
+
+El detalle completo del alcance, las exclusiones y su justificación está en **[docs/cobertura-alcance.md](docs/cobertura-alcance.md)**.
+
+**Meta declarada: 80 %.** El mayor avance disponible es sustituir `pyserial` por un doble de prueba para cubrir `leer_serial()`.
+
+---
+
+## 25. Integración continua (GitHub Actions)
+
+Cada `push` y cada Pull Request hacia `main` dispara automáticamente el flujo definido en `.github/workflows/tests.yml`:
+
+1. Descarga el repositorio con su historial completo (Codecov lo necesita para el *diff coverage*)
+2. Instala Python 3.13 y las dependencias de desarrollo
+3. Ejecuta las 217 pruebas midiendo líneas y ramas
+4. Publica el resultado en Codecov
+5. Adjunta el reporte HTML como artefacto descargable (30 días)
+6. Escribe un resumen de cobertura en la pestaña **Summary** de la ejecución
+
+### Umbral de regresión
+
+`pyproject.toml` define `fail_under = 55`. Si un cambio hace caer la cobertura por debajo del 55 %, **la build falla**. Es la alerta por caída de porcentaje que menciona la guía, y evita que se agregue código sin pruebas sin que nadie lo note.
+
+### Consultar los resultados
+
+- **Pestaña Actions** del repositorio → última ejecución → *Summary* para la tabla de cobertura
+- **Artefacto `reporte-cobertura-html`** → descargar y abrir `index.html` para el detalle línea por línea
+
+### Configuración pendiente
+
+Para que el histórico de Codecov funcione hay que registrar el secreto `CODECOV_TOKEN` en **Settings → Secrets and variables → Actions**. Sin él las pruebas siguen corriendo y la build no falla (`fail_ci_if_error: false`), pero no se acumula la evolución temporal de la cobertura.
+
+---
+
 *Proyecto desarrollado para el curso de IoT — 7.º semestre.*  
+*Continuado en el módulo de Calidad y Métricas del Software — 8.º semestre.*  
 *Universitaria de Colombia, Bogotá D.C.*
