@@ -3,7 +3,7 @@
 Sistema de predicción de temperatura a **30 minutos** para las **20 localidades de Bogotá D.C.**, combinando sensores ambientales IoT (Arduino) con Machine Learning calibrado sobre física real del clima bogotano.
 
 [![Pruebas y Cobertura](https://github.com/KnNgZmN/Proyecto-Microclima-ML/actions/workflows/tests.yml/badge.svg)](https://github.com/KnNgZmN/Proyecto-Microclima-ML/actions/workflows/tests.yml)
-![Cobertura](https://img.shields.io/badge/cobertura-57.72%25-yellow)
+[![codecov](https://codecov.io/gh/KnNgZmN/Proyecto-Microclima-ML/branch/main/graph/badge.svg)](https://codecov.io/gh/KnNgZmN/Proyecto-Microclima-ML)
 ![Pruebas](https://img.shields.io/badge/pruebas-217%20passed-brightgreen)
 
 ---
@@ -1082,9 +1082,29 @@ Cada `push` y cada Pull Request hacia `main` dispara automáticamente el flujo d
 - **Pestaña Actions** del repositorio → última ejecución → *Summary* para la tabla de cobertura
 - **Artefacto `reporte-cobertura-html`** → descargar y abrir `index.html` para el detalle línea por línea
 
-### Configuración pendiente
+### Integración con Codecov
 
-Para que el histórico de Codecov funcione hay que registrar el secreto `CODECOV_TOKEN` en **Settings → Secrets and variables → Actions**. Sin él las pruebas siguen corriendo y la build no falla (`fail_ci_if_error: false`), pero no se acumula la evolución temporal de la cobertura.
+El secreto `CODECOV_TOKEN` ya está registrado y la subida de informes está verificada, así que el histórico de cobertura se acumula desde cada ejecución en `main`.
+
+El comportamiento de Codecov se configura en `codecov.yml`:
+
+| Verificación | Umbral | Qué controla |
+|--------------|--------|--------------|
+| `project` | Caída máxima de 1 punto | Que la cobertura global no retroceda |
+| `patch` | 80 % | Que el **código nuevo** de cada PR venga cubierto |
+
+La verificación `patch` es el *diff coverage* que menciona la guía: no exige cubrir todo el pasado, pero sí que lo que se agregue de aquí en adelante llegue con pruebas.
+
+### Por qué Codecov y `pytest` reportan cifras distintas
+
+No es un error de configuración. Miden el mismo código con fórmulas diferentes:
+
+| Herramienta | Cifra | Fórmula |
+|-------------|-------|---------|
+| `coverage.py` | **57,72 %** | Incluye las **ramas** en el denominador junto a las sentencias |
+| Codecov | 58,27 % | `hits / (hits + misses + partials)` — solo sobre líneas |
+
+**La cifra oficial del proyecto es la de `coverage.py` (57,72 %)**, porque incluye cobertura de ramas, que es la métrica que exige la sección 4 de la guía. La de Codecov se usa para leer la evolución temporal, no para reportar el nivel alcanzado.
 
 ---
 

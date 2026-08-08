@@ -1,0 +1,40 @@
+# Configuración de Codecov — módulo de Calidad y Métricas del Software.
+#
+# Nota sobre la cifra: Codecov calcula hits/(hits+misses+partials) sobre líneas,
+# mientras que coverage.py incluye las ramas en el denominador. Por eso Codecov
+# reporta ~58,3 % donde pytest reporta 57,72 %. La cifra oficial del proyecto es
+# la de coverage.py, por ser la que incluye cobertura de ramas.
+
+coverage:
+  precision: 2
+  round: down
+  range: "55...80"        # rojo por debajo de 55, verde al llegar a la meta de 80
+
+  status:
+    # Cobertura global del proyecto: no debe retroceder.
+    project:
+      default:
+        target: auto      # se compara contra la cobertura de la rama base
+        threshold: 1%     # tolera fluctuaciones menores a 1 punto
+
+    # Diff coverage: el código NUEVO de cada PR debe venir cubierto.
+    # Es la métrica que la guía asocia a Codecov. No exige cubrir el pasado.
+    patch:
+      default:
+        target: 80%
+        threshold: 0%
+
+# Comentario automático en cada Pull Request con el impacto en cobertura.
+comment:
+  layout: "condensed_header, diff, flags, files"
+  behavior: default
+  require_changes: true   # solo comenta si la cobertura cambia
+
+# Rutas excluidas de la medición. Deben coincidir con el bloque `omit`
+# de pyproject.toml; la justificación está en docs/cobertura-alcance.md.
+ignore:
+  - "tests/**"
+  - "app/**"                    # interfaz Streamlit, 828 líneas
+  - "src/generate_dataset.py"   # sin guarda __main__: se ejecuta al importar
+  - "src/train_model.py"        # sin guarda __main__: se ejecuta al importar
+  - "src/visualization.py"      # sin guarda __main__: abre ventanas de matplotlib
