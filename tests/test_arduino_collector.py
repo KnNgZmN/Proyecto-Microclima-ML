@@ -18,6 +18,14 @@ import pytest
 
 import arduino_collector as ac
 
+# ---------------------------------------------------------------
+# DEMO DE EXPOSICION - NO FUSIONAR
+# Desactiva las 68 pruebas de este archivo para demostrar que el
+# umbral fail_under=95 bloquea el Pull Request.
+# Deshacer con:  git checkout tests/test_arduino_collector.py
+# ---------------------------------------------------------------
+pytestmark = pytest.mark.skip("DEMO de exposicion")
+
 
 class SerialFalso:
     """
