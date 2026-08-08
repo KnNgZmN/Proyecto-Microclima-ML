@@ -4,7 +4,7 @@ Sistema de predicción de temperatura a **30 minutos** para las **20 localidades
 
 [![Pruebas y Cobertura](https://github.com/KnNgZmN/Proyecto-Microclima-ML/actions/workflows/tests.yml/badge.svg)](https://github.com/KnNgZmN/Proyecto-Microclima-ML/actions/workflows/tests.yml)
 [![codecov](https://codecov.io/gh/KnNgZmN/Proyecto-Microclima-ML/branch/main/graph/badge.svg)](https://codecov.io/gh/KnNgZmN/Proyecto-Microclima-ML)
-![Pruebas](https://img.shields.io/badge/pruebas-217%20passed-brightgreen)
+![Pruebas](https://img.shields.io/badge/pruebas-260%20passed-brightgreen)
 
 ---
 
@@ -547,7 +547,7 @@ ProyectoMicroclima/
 ├── app/
 │   └── streamlit_app.py          # Interfaz web interactiva (4 pestañas)
 │
-├── tests/                        # Suite de pruebas — 217 casos
+├── tests/                        # Suite de pruebas — 260 casos
 │   ├── conftest.py               # Fixtures compartidas y doble del modelo
 │   ├── test_data_processing.py   # Saneamiento e interpolación
 │   ├── test_feature_engineering.py  # Features, ciclos y aislamiento por localidad
@@ -1024,10 +1024,10 @@ Línea base medida **antes** de escribir cualquier prueba, para poder documentar
 
 | Indicador | Antes | Ahora |
 |-----------|-------|-------|
-| Pruebas automatizadas | 0 | **217** |
-| Cobertura total (líneas + ramas) | 0.00 % | **57.72 %** |
+| Pruebas automatizadas | 0 | **260** |
+| Cobertura total (líneas + ramas) | 0.00 % | **100.00 %** |
 | Cobertura del núcleo lógico | 0.00 % | **100.00 %** |
-| Sentencias sin cubrir | 266 | 110 |
+| Sentencias sin cubrir | 266 | **0** |
 
 Desglose por módulo:
 
@@ -1037,8 +1037,8 @@ Desglose por módulo:
 | `src/feature_engineering.py` | 60 | 0 | **100.00 %** |
 | `src/localidades.py` | 4 | 0 | **100.00 %** |
 | `src/predict.py` | 22 | 0 | **100.00 %** |
-| `src/arduino_collector.py` | 162 | 110 | 30.81 % |
-| **TOTAL** | **266** | **110** | **57.72 %** |
+| `src/arduino_collector.py` | 191 | 0 | **100.00 %** |
+| **TOTAL** | **295** | **0** | **100.00 %** |
 
 ### Qué cubre cada archivo de pruebas
 
@@ -1047,18 +1047,20 @@ Desglose por módulo:
 | `test_localidades.py` | 107 | Que las 20 localidades tengan todos sus campos, coordenadas dentro de Bogotá, densidad normalizada y altitudes plausibles |
 | `test_feature_engineering.py` | 39 | Las 19 features, la codificación cíclica de hora y mes, la fórmula de presión de vapor y que los promedios móviles **no se contaminen entre localidades** |
 | `test_predict.py` | 31 | La inferencia para las 20 localidades, el fallback ante una localidad desconocida y la carga perezosa del modelo |
-| `test_arduino_collector.py` | 25 | La validación de rangos del sensor y la escritura correcta del CSV y del JSON en vivo |
+| `test_arduino_collector.py` | 68 | La interpretación de la línea serial en sus formatos de 4, 3 y 2 valores, la validación de rangos, la persistencia en CSV y JSON, y el bucle de lectura completo contra un puerto simulado |
 | `test_data_processing.py` | 15 | La detección de valores fuera de rango y su interpolación lineal |
 
 ### Alcance de la medición y deuda conocida
 
-El 30.81 % de `arduino_collector.py` no es un descuido. Las 110 sentencias sin cubrir son casi todas `leer_serial()` y `simular()`, que abren un puerto serie físico y ejecutan bucles indefinidos. **No se excluyeron de la medición**: se dejan contabilizadas a propósito para que la deuda quede visible en la métrica en lugar de esconderse tras una exclusión.
+En la primera iteración `arduino_collector.py` quedó en 30.81 %: `leer_serial()` y `simular()` abrían un puerto serie físico y corrían bucles indefinidos. **Nunca se excluyeron de la medición** — se contaron como no cubiertas para que la deuda quedara visible en el porcentaje en lugar de esconderse tras una exclusión.
 
-Sí están excluidos tres scripts (`generate_dataset.py`, `train_model.py` y `visualization.py`) porque ejecutan todo su contenido al importarse: no tienen la guarda `if __name__ == "__main__"`. Importarlos desde una prueba dispararía la generación del dataset completo, el entrenamiento del modelo o la apertura de ventanas de matplotlib. Es un hallazgo de testabilidad documentado como deuda técnica a refactorizar.
+Esa deuda se saldó **refactorizando el módulo, no ampliando las exclusiones**: se extrajo `parsear_lectura()` (la interpretación de la línea CSV era lógica pura atrapada tras el hardware), el puerto serie pasó a inyectarse como parámetro, el bucle admite una cota de lecturas y `sys.exit()` se sustituyó por `ColectorError`. El total de sentencias medidas **subió** de 266 a 295 y aun así quedó al 100 %: no se llegó ahí reduciendo el denominador.
+
+Siguen excluidos tres scripts (`generate_dataset.py`, `train_model.py` y `visualization.py`) porque ejecutan todo su contenido al importarse: no tienen la guarda `if __name__ == "__main__"`. Importarlos desde una prueba dispararía la generación del dataset completo, el entrenamiento del modelo o la apertura de ventanas de matplotlib. Es la última deuda de testabilidad conocida.
 
 El detalle completo del alcance, las exclusiones y su justificación está en **[docs/cobertura-alcance.md](docs/cobertura-alcance.md)**.
 
-**Meta declarada: 80 %.** El mayor avance disponible es sustituir `pyserial` por un doble de prueba para cubrir `leer_serial()`.
+> **Ambigüedad detectada al probar.** Los rangos que desambiguan una línea de dos valores se solapan: `"25,50"` satisface a la vez el criterio de temperatura/humedad y el de luz/ruido, y el resultado dependía del orden de los `if` sin que estuviera documentado. Hoy hay una prueba que fija ese contrato.
 
 ---
 
@@ -1068,14 +1070,16 @@ Cada `push` y cada Pull Request hacia `main` dispara automáticamente el flujo d
 
 1. Descarga el repositorio con su historial completo (Codecov lo necesita para el *diff coverage*)
 2. Instala Python 3.13 y las dependencias de desarrollo
-3. Ejecuta las 217 pruebas midiendo líneas y ramas
+3. Ejecuta las 260 pruebas midiendo líneas y ramas
 4. Publica el resultado en Codecov
 5. Adjunta el reporte HTML como artefacto descargable (30 días)
 6. Escribe un resumen de cobertura en la pestaña **Summary** de la ejecución
 
 ### Umbral de regresión
 
-`pyproject.toml` define `fail_under = 55`. Si un cambio hace caer la cobertura por debajo del 55 %, **la build falla**. Es la alerta por caída de porcentaje que menciona la guía, y evita que se agregue código sin pruebas sin que nadie lo note.
+`pyproject.toml` define `fail_under = 95`. Si un cambio hace caer la cobertura por debajo del 95 %, **la build falla**. Es la alerta por caída de porcentaje que menciona la guía, y evita que se agregue código sin pruebas sin que nadie lo note.
+
+El umbral se fija en 95 y no en 100 de forma deliberada: un umbral igual a la cobertura actual rompe la build ante cualquier línea nueva, incluso legítima, y empuja al equipo a desactivarlo. 95 deja margen sin permitir que la cobertura se desplome.
 
 ### Consultar los resultados
 
@@ -1097,14 +1101,16 @@ La verificación `patch` es el *diff coverage* que menciona la guía: no exige c
 
 ### Por qué Codecov y `pytest` reportan cifras distintas
 
-No es un error de configuración. Miden el mismo código con fórmulas diferentes:
+Cuando la cobertura no es total, las dos herramientas reportan cifras distintas. No es un error de configuración: miden el mismo código con fórmulas diferentes.
 
-| Herramienta | Cifra | Fórmula |
-|-------------|-------|---------|
-| `coverage.py` | **57,72 %** | Incluye las **ramas** en el denominador junto a las sentencias |
-| Codecov | 58,27 % | `hits / (hits + misses + partials)` — solo sobre líneas |
+| Herramienta | Fórmula | En la 1.ª iteración |
+|-------------|---------|--------------------:|
+| `coverage.py` | Incluye las **ramas** en el denominador junto a las sentencias | 57,72 % |
+| Codecov | `hits / (hits + misses + partials)` — solo sobre líneas | 58,27 % |
 
-**La cifra oficial del proyecto es la de `coverage.py` (57,72 %)**, porque incluye cobertura de ramas, que es la métrica que exige la sección 4 de la guía. La de Codecov se usa para leer la evolución temporal, no para reportar el nivel alcanzado.
+**La cifra oficial del proyecto es la de `coverage.py`**, porque incluye cobertura de ramas, que es la métrica que exige la sección 4 de la guía. La de Codecov se usa para leer la evolución temporal.
+
+Al alcanzar el 100 % la diferencia desaparece: sin sentencias sin cubrir ni ramas parciales, ambas fórmulas dan el mismo resultado. La distinción vuelve a importar en cuanto la cobertura baje del total, así que conviene tenerla presente.
 
 ---
 
