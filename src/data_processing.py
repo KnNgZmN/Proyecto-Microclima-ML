@@ -39,3 +39,19 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     df = df.dropna(subset=cols_sensor)
 
     return df.reset_index(drop=True)
+
+
+# ---------------------------------------------------------------
+# DEMO DE EXPOSICION - NO FUSIONAR
+# Funcion nueva sin ninguna prueba, para demostrar el diff coverage.
+# Deshacer con:  git checkout src/data_processing.py
+# ---------------------------------------------------------------
+def clasificar_confort(temp: float, hum: float) -> str:
+    """Clasifica el confort termico de una lectura."""
+    if temp < 12.0:
+        return "frio"
+    if temp > 24.0:
+        return "calido"
+    if hum > 85.0:
+        return "humedo"
+    return "confortable"
