@@ -27,6 +27,7 @@ import csv
 import random
 import math
 from datetime import datetime
+from typing import NamedTuple, Optional
 
 import pandas as pd
 import numpy as np
@@ -88,6 +89,117 @@ def validar_lectura(temp, hum, luz, ruido) -> bool:
 
 
 # -------------------------------------------------------
+# Interpretación de la línea serial
+#
+# Esta lógica vivía dentro del bucle de leer_serial(), detrás de la
+# apertura del puerto físico, por lo que era imposible de probar. Al
+# extraerla queda como función pura: entra texto, sale una lectura.
+# -------------------------------------------------------
+class ColectorError(RuntimeError):
+    """Error irrecuperable del colector.
+
+    Reemplaza a los sys.exit() que antes estaban dentro de las funciones:
+    una función de librería no debe matar el proceso que la llama. El
+    punto de entrada la captura y traduce a código de salida.
+    """
+
+
+class LineaIncompleta(ValueError):
+    """La línea trae menos de dos valores.
+
+    Se distingue del resto de descartes porque es la única condición que
+    alimenta el contador de errores consecutivos: indica que el sketch
+    del Arduino está enviando en un formato que no reconocemos.
+    """
+
+
+class Lectura(NamedTuple):
+    """Lectura ya interpretada, lista para validar y persistir.
+
+    `nota` describe cualquier suposición que hubo que hacer (valores por
+    defecto, temperatura estimada por altitud). El llamador la imprime;
+    así la función se mantiene pura y las pruebas pueden verificar qué
+    supuesto se aplicó, no solo el resultado.
+    """
+    temperatura: float
+    humedad: float
+    luz: float
+    ruido: float
+    nota: str = ""
+
+
+def parsear_lectura(linea: str, loc_info: dict) -> Optional[Lectura]:
+    """
+    Interpreta una línea CSV enviada por el Arduino.
+
+    El sketch puede enviar 4, 3 o 2 valores según los sensores conectados:
+      4 → temp,hum,luz,ruido      (montaje completo)
+      3 → temp,hum,luz            (sin micrófono)
+      2 → se desambigua por rango (solo DHT, o solo LDR + micrófono)
+
+    Retorna
+    -------
+    Lectura : si la línea pudo interpretarse.
+    None    : si debe ignorarse en silencio — línea vacía, comentario del
+              sketch ('#'), valores no numéricos, o par de valores que no
+              cae en ningún rango conocido.
+
+    Lanza
+    -----
+    LineaIncompleta : si la línea trae menos de dos valores.
+    """
+    linea = linea.strip()
+    if not linea or linea.startswith("#"):
+        return None
+
+    partes = linea.split(",")
+    n = len(partes)
+    if n < 2:
+        raise LineaIncompleta(linea)
+
+    try:
+        vals = [float(p) for p in partes[:4]]
+    except ValueError:
+        return None
+
+    if n >= 4:
+        return Lectura(vals[0], vals[1], vals[2], vals[3])
+
+    if n == 3:
+        return Lectura(
+            vals[0], vals[1], vals[2], 45.0,
+            "3 valores recibidos (temp,hum,luz). Ruido default=45",
+        )
+
+    # Dos valores: hay que deducir qué sensores los enviaron.
+    v0, v1 = vals[0], vals[1]
+    temp_ok = -2.0 <= v0 <= 30.0   and 30.0 <= v1 <= 100.0
+    luz_ok  =  0.0 <= v0 <= 1100.0 and 19.0 <= v1 <= 110.0
+
+    # NOTA: los dos rangos se solapan (p. ej. "25,50" cumple ambos). El
+    # orden de estas dos ramas es, por tanto, parte del contrato: ante la
+    # ambigüedad se prefiere interpretar temp,hum. Las pruebas lo fijan.
+    if temp_ok:
+        return Lectura(
+            v0, v1, 600.0, 45.0,
+            f"2 valores -> temp={v0}C, hum={v1}%. Luz default=600, ruido default=45",
+        )
+
+    if luz_ok:
+        # Sin DHT: se estima la temperatura por altitud con la tasa de
+        # caída ambiental, la misma constante que usa el modelo.
+        from localidades import ALT_REFERENCIA, LAPSE_RATE
+        temp = round(14.0 + (ALT_REFERENCIA - loc_info["altitud"]) * LAPSE_RATE, 1)
+        return Lectura(
+            temp, 72.0, v0, v1,
+            f"2 valores -> luz={v0:.0f}, ruido={v1:.0f}. "
+            f"Sin DHT: temp estimada por altitud={temp}C, hum default=72%",
+        )
+
+    return None
+
+
+# -------------------------------------------------------
 # Guardar fila en CSV
 # -------------------------------------------------------
 def guardar_fila(ts: datetime, temp: float, hum: float, luz: float, ruido: float,
@@ -135,79 +247,81 @@ def predecir_en_vivo(temp, hum, luz, ruido, hora, mes, historia, loc_info: dict)
 # -------------------------------------------------------
 # Lector serial (Arduino real)
 # -------------------------------------------------------
-def leer_serial(port: str, baud: int, intervalo: int, con_prediccion: bool,
-                loc_id: int, loc_info: dict):
+def abrir_puerto(port: str, baud: int):
+    """Abre el puerto serie real. Aislada para poder sustituirla en pruebas."""
     try:
         import serial
     except ImportError:
-        print("[ERROR] Instala pyserial:  pip install pyserial")
-        sys.exit(1)
+        raise ColectorError("Instala pyserial:  pip install pyserial")
 
-    print(f"[INFO] Conectando a {port} @ {baud} baud...")
-    print(f"[INFO] Localidad: {loc_info['nombre']} (ID={loc_id}, {loc_info['altitud']} m)")
     try:
-        ser = serial.Serial(port, baud, timeout=2)
+        return serial.Serial(port, baud, timeout=2)
     except serial.SerialException as e:
-        print(f"[ERROR] No se pudo abrir el puerto: {e}")
-        sys.exit(1)
+        raise ColectorError(f"No se pudo abrir el puerto: {e}")
+
+
+def leer_serial(port: str, baud: int, intervalo: int, con_prediccion: bool,
+                loc_id: int, loc_info: dict,
+                conexion=None, max_lecturas: int = None) -> int:
+    """
+    Lee lecturas del Arduino por puerto serie y las persiste.
+
+    Parámetros
+    ----------
+    conexion     : objeto tipo Serial ya abierto. Si es None se abre uno
+                   real sobre `port`. Permite inyectar un doble en pruebas
+                   y ejecutar el bucle sin hardware.
+    max_lecturas : detiene el bucle tras N lecturas válidas guardadas.
+                   None (defecto) = indefinido, hasta Ctrl+C.
+
+    Retorna
+    -------
+    int : cantidad de lecturas válidas guardadas.
+    """
+    ser = conexion
+    if ser is None:
+        print(f"[INFO] Conectando a {port} @ {baud} baud...")
+        print(f"[INFO] Localidad: {loc_info['nombre']} (ID={loc_id}, {loc_info['altitud']} m)")
+        ser = abrir_puerto(port, baud)
 
     print(f"[OK] Conectado. Guardando en: {DATA_PATH}")
     print("     Ctrl+C para detener.\n")
 
     historia = pd.DataFrame(columns=["temperatura", "humedad"])
     errores_consecutivos = 0
+    guardadas = 0
 
     try:
-        while True:
+        while max_lecturas is None or guardadas < max_lecturas:
             linea = ser.readline().decode("utf-8", errors="ignore").strip()
-            if not linea or linea.startswith("#"):
-                continue
 
-            partes = linea.split(",")
-            n = len(partes)
-            if n < 2:
+            try:
+                lectura = parsear_lectura(linea, loc_info)
+            except LineaIncompleta:
                 print(f"  [SKIP] Linea invalida (menos de 2 valores): '{linea}'")
                 errores_consecutivos += 1
                 if errores_consecutivos >= 10:
                     print("[ERROR] Demasiados errores consecutivos. Verifica el sketch.")
-                    print(f"[INFO]  Formato esperado: temp,hum,luz,ruido  (ej: 18.50,72.30,850,45)")
+                    print("[INFO]  Formato esperado: temp,hum,luz,ruido  (ej: 18.50,72.30,850,45)")
                     break
                 continue
 
-            errores_consecutivos = 0
+            # Una línea vacía o comentario no reinicia el contador: no es
+            # señal de que el sketch esté enviando bien.
+            if linea and not linea.startswith("#"):
+                errores_consecutivos = 0
 
-            try:
-                vals = [float(p) for p in partes[:4]]
-            except ValueError:
-                print(f"  [SKIP] No se pudo parsear: '{linea}'")
+            if lectura is None:
+                if linea and not linea.startswith("#"):
+                    print(f"  [SKIP] No se pudo interpretar: '{linea}'")
                 continue
 
-            if n >= 4:
-                temp, hum, luz, ruido = vals[0], vals[1], vals[2], vals[3]
-            elif n == 3:
-                # 3 valores: temp, hum, luz  — ruido por default
-                temp, hum, luz, ruido = vals[0], vals[1], vals[2], 45.0
-                print(f"  [INFO] 3 valores recibidos (temp,hum,luz). Ruido default=45")
-            else:
-                # 2 valores: detectar si son temp,hum o luz,ruido segun rangos
-                v0, v1 = vals[0], vals[1]
-                temp_ok = -2.0 <= v0 <= 30.0 and 30.0 <= v1 <= 100.0
-                luz_ok  =  0.0 <= v0 <= 1100.0 and 19.0 <= v1 <= 110.0
-                if temp_ok:
-                    temp, hum, luz, ruido = v0, v1, 600.0, 45.0
-                    print(f"  [INFO] 2 valores -> temp={temp}C, hum={hum}%. "
-                          f"Luz default=600, ruido default=45")
-                elif luz_ok:
-                    # Solo sensores analogicos (LDR + microfono), sin DHT
-                    from localidades import ALT_REFERENCIA, LAPSE_RATE
-                    luz, ruido = v0, v1
-                    temp = round(14.0 + (ALT_REFERENCIA - loc_info["altitud"]) * LAPSE_RATE, 1)
-                    hum  = 72.0
-                    print(f"  [INFO] 2 valores -> luz={luz:.0f}, ruido={ruido:.0f}. "
-                          f"Sin DHT: temp estimada por altitud={temp}C, hum default=72%")
-                else:
-                    print(f"  [SKIP] Valores fuera de rango conocido: '{linea}'")
-                    continue
+            if lectura.nota:
+                print(f"  [INFO] {lectura.nota}")
+
+            temp, hum, luz, ruido = (
+                lectura.temperatura, lectura.humedad, lectura.luz, lectura.ruido
+            )
 
             if not validar_lectura(temp, hum, luz, ruido):
                 continue
@@ -217,6 +331,7 @@ def leer_serial(port: str, baud: int, intervalo: int, con_prediccion: bool,
             mes  = ts.month
 
             guardar_fila(ts, temp, hum, luz, ruido, loc_id, loc_info)
+            guardadas += 1
 
             nueva_fila = pd.DataFrame([{"temperatura": temp, "humedad": hum}])
             historia = pd.concat([historia, nueva_fila], ignore_index=True).tail(HISTORIA_MAX)
@@ -241,12 +356,44 @@ def leer_serial(port: str, baud: int, intervalo: int, con_prediccion: bool,
     finally:
         ser.close()
 
+    return guardadas
+
 
 # -------------------------------------------------------
 # Modo simulación (sin hardware)
 # -------------------------------------------------------
+def sintetizar_lectura(hora: int, densidad: float, alt_corr: float,
+                       rng=random) -> Lectura:
+    """
+    Genera una lectura sintética con la física del clima bogotano.
+
+    Aplica el ciclo diurno, la corrección altitudinal y la isla de calor
+    urbana (más marcada de noche, cuando el asfalto libera el calor
+    acumulado). Es pura salvo por `rng`, que se inyecta para poder
+    sembrarlo y obtener resultados reproducibles en las pruebas.
+    """
+    hora_rad = (hora / 24) * 2 * math.pi
+    uhi = (densidad - 0.5) * (1.0 if 6 <= hora <= 18 else 2.5)
+
+    temp = round(13.0 + 6.0 * math.sin(hora_rad - math.pi / 2) + alt_corr + uhi + rng.gauss(0, 0.8), 2)
+    hum  = round(72.0 - 8.0 * math.sin(hora_rad - math.pi / 2) + rng.gauss(0, 4.0), 1)
+    hum  = max(40.0, min(100.0, hum))
+    luz  = int(rng.randint(500, 1000) if 6 <= hora <= 18 else rng.randint(0, 50))
+
+    ruido_base = int(40 + densidad * 20)
+    ruido = int(
+        rng.randint(ruido_base + 10, ruido_base + 31)
+        if (7 <= hora <= 9 or 17 <= hora <= 19)
+        else rng.randint(ruido_base - 10, ruido_base + 11)
+    )
+    ruido = max(30, min(100, ruido))
+
+    return Lectura(temp, hum, luz, ruido)
+
+
 def simular(intervalo: int, con_prediccion: bool, n_lecturas: int,
-            loc_id: int, loc_info: dict):
+            loc_id: int, loc_info: dict, rng=random) -> int:
+    """Genera y persiste `n_lecturas` sintéticas, sin hardware."""
     from localidades import ALT_REFERENCIA, LAPSE_RATE
 
     alt_corr = (ALT_REFERENCIA - loc_info["altitud"]) * LAPSE_RATE
@@ -257,29 +404,20 @@ def simular(intervalo: int, con_prediccion: bool, n_lecturas: int,
     print(f"      Guardando en: {DATA_PATH}\n")
 
     historia = pd.DataFrame(columns=["temperatura", "humedad"])
+    generadas = 0
 
     for _ in range(n_lecturas):
         ts   = datetime.now()
         hora = ts.hour
         mes  = ts.month
 
-        hora_rad = (hora / 24) * 2 * math.pi
-        uhi = (densidad - 0.5) * (1.0 if 6 <= hora <= 18 else 2.5)
-
-        temp  = round(13.0 + 6.0 * math.sin(hora_rad - math.pi / 2) + alt_corr + uhi + random.gauss(0, 0.8), 2)
-        hum   = round(72.0 - 8.0 * math.sin(hora_rad - math.pi / 2) + random.gauss(0, 4.0), 1)
-        hum   = max(40.0, min(100.0, hum))
-        luz   = int(random.randint(500, 1000) if 6 <= hora <= 18 else random.randint(0, 50))
-
-        ruido_base = int(40 + densidad * 20)
-        ruido = int(
-            random.randint(ruido_base + 10, ruido_base + 31)
-            if (7 <= hora <= 9 or 17 <= hora <= 19)
-            else random.randint(ruido_base - 10, ruido_base + 11)
+        lectura = sintetizar_lectura(hora, densidad, alt_corr, rng)
+        temp, hum, luz, ruido = (
+            lectura.temperatura, lectura.humedad, lectura.luz, lectura.ruido
         )
-        ruido = max(30, min(100, ruido))
 
         guardar_fila(ts, temp, hum, luz, ruido, loc_id, loc_info)
+        generadas += 1
 
         nueva_fila = pd.DataFrame([{"temperatura": temp, "humedad": hum}])
         historia = pd.concat([historia, nueva_fila], ignore_index=True).tail(HISTORIA_MAX)
@@ -300,6 +438,7 @@ def simular(intervalo: int, con_prediccion: bool, n_lecturas: int,
         time.sleep(intervalo)
 
     print("\n[OK] Simulacion terminada.")
+    return generadas
 
 
 # -------------------------------------------------------
@@ -382,7 +521,13 @@ if __name__ == "__main__":
 
     os.makedirs(os.path.dirname(DATA_PATH), exist_ok=True)
 
-    if args.simulate:
-        simular(args.intervalo, args.predict, args.lecturas, loc_id, loc_info)
-    else:
-        leer_serial(args.port, args.baud, args.intervalo, args.predict, loc_id, loc_info)
+    # ColectorError sustituye a los sys.exit() que antes vivían dentro de
+    # las funciones: la traducción a código de salida ocurre solo aquí.
+    try:
+        if args.simulate:
+            simular(args.intervalo, args.predict, args.lecturas, loc_id, loc_info)
+        else:
+            leer_serial(args.port, args.baud, args.intervalo, args.predict, loc_id, loc_info)
+    except ColectorError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
