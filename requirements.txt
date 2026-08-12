@@ -6,3 +6,13 @@ matplotlib>=3.6.0
 streamlit>=1.20.0
 streamlit-autorefresh>=1.0.1
 pyserial>=3.5
+
+# --- Restricciones de seguridad sobre dependencias transitivas ---
+# No las usamos directamente; se fijan porque Snyk reporto CVE conocidos
+# en las versiones que arrastraban nuestras dependencias directas.
+#
+# pillow: lo introduce matplotlib (pillow>=9). La version 12.2.0 acumulaba
+# 10 vulnerabilidades (8 de severidad alta): escrituras y lecturas fuera de
+# limites, y asignaciones de memoria sin control de tamano al decodificar
+# imagenes. Corregidas en 12.3.0.
+pillow>=12.3.0

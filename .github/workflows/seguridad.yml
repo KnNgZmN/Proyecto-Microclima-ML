@@ -1,0 +1,66 @@
+name: Seguridad
+
+# Analisis de seguridad con Snyk — seccion 5 de la Guia de Metricas (DevSecOps).
+#
+# Dos analisis distintos:
+#   - Snyk Open Source: CVE conocidos en dependencias de terceros
+#   - Snyk Code (SAST):  vulnerabilidades en nuestro propio codigo
+#
+# Requiere el secreto SNYK_TOKEN (Settings > Secrets and variables > Actions).
+# Se obtiene en app.snyk.io > Account settings > Auth Token.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Lunes 6:00 UTC. Un CVE puede publicarse sin que nuestro codigo cambie,
+    # asi que el analisis debe repetirse aunque no haya commits.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  dependencias:
+    name: Snyk Open Source
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v5
+
+      - name: Configurar Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Instalar la CLI de Snyk
+        run: npm install -g snyk
+
+      # Se audita requirements.lock, no requirements.txt: Snyk necesita
+      # versiones exactas para construir un arbol determinista. Con rangos
+      # abiertos falla con SNYK-OS-PYTHON-0013 (Missing required packages).
+      - name: Auditar dependencias
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk test \
+            --file=requirements.lock \
+            --package-manager=pip \
+            --severity-threshold=high
+
+  codigo:
+    name: Snyk Code (SAST)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v5
+
+      - name: Instalar la CLI de Snyk
+        run: npm install -g snyk
+
+      - name: Analizar el codigo fuente
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk code test --severity-threshold=high
