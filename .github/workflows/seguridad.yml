@@ -37,9 +37,17 @@ jobs:
       - name: Instalar la CLI de Snyk
         run: npm install -g snyk
 
-      # Se audita requirements.lock, no requirements.txt: Snyk necesita
+      # Snyk inspecciona el entorno instalado, no solo el archivo: sin este
+      # paso falla con SNYK-OS-PYTHON-0013 (Missing required packages).
+      # Instalar desde el .lock ademas comprueba que sea instalable.
+      - name: Instalar las dependencias a auditar
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.lock
+
+      # Se audita requirements.lock y no requirements.txt: Snyk necesita
       # versiones exactas para construir un arbol determinista. Con rangos
-      # abiertos falla con SNYK-OS-PYTHON-0013 (Missing required packages).
+      # abiertos (pandas>=1.5.0) falla con el mismo error.
       - name: Auditar dependencias
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
