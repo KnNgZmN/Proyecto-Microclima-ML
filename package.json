@@ -1,0 +1,17 @@
+{
+  "name": "microclima-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Front web del proyecto Microclima Bogota D.C.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.11",
+    "jsdom": "^29.1.1",
+    "vitest": "^4.1.11"
+  }
+}

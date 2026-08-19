@@ -55,4 +55,9 @@ metricas_ingenieria_software.pdf
 MicroclimaCompleto.pptx
 presentacion-cobertura.html
 exposicion-cobertura-pruebas.html
+presentacion-snyk.html
 
+
+# Front web — dependencias y cobertura de JavaScript
+node_modules/
+coverage-web/
