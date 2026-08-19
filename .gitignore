@@ -48,14 +48,20 @@ desktop.ini
 coverage.xml
 htmlcov/
 
-#Exposicion
-contexto_exposicion.md
+# ---------------------------------------------------------------
+# Material academico — no forma parte del proyecto
+#
+# Se ignora la carpeta completa en lugar de archivo por archivo, para
+# no tener que acordarse de agregar cada presentacion nueva a la lista.
+#
+# Ojo con las mayusculas: git distingue mayusculas de minusculas en
+# Linux, asi que el nombre debe coincidir exactamente con el archivo.
+# ---------------------------------------------------------------
+presentaciones/
+docs/CONTEXTO_EXPOSICION.md
+docs/INFORME-METRICAS.md
+docs/metricas_ingenieria_software.pdf
 Link GitHub e Integrantes.txt
-metricas_ingenieria_software.pdf
-MicroclimaCompleto.pptx
-presentacion-cobertura.html
-exposicion-cobertura-pruebas.html
-presentacion-snyk.html
 
 
 # Front web — dependencias y cobertura de JavaScript
