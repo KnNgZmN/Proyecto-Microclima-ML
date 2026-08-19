@@ -53,7 +53,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
-          flags: unittests
+          flags: backend
           fail_ci_if_error: false
 
       - name: Guardar el reporte HTML como artefacto
@@ -67,15 +67,68 @@ jobs:
       - name: Resumen de cobertura en la pestaña Summary
         if: always()
         run: |
-          echo "### Cobertura de pruebas" >> $GITHUB_STEP_SUMMARY
+          echo "### Cobertura — Python (api + src)" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           # '|| true': el umbral ya lo aplica el paso de pytest; aquí solo se muestra
           coverage report >> $GITHUB_STEP_SUMMARY || true
           echo '```' >> $GITHUB_STEP_SUMMARY
 
+  front:
+    name: vitest + coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      # 'npm ci' instala exactamente lo del package-lock: es reproducible,
+      # a diferencia de 'npm install', que puede resolver versiones nuevas.
+      - name: Instalar dependencias del front
+        run: npm ci
+
+      # El umbral vive en vitest.config.js, igual que fail_under vive en
+      # pyproject.toml: si la cobertura del front cae, este paso falla.
+      - name: Ejecutar pruebas del front con cobertura
+        run: npx vitest run --coverage
+
+      - name: Guardar lcov.info para SonarQube
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-lcov
+          path: coverage-web/lcov.info
+          retention-days: 1
+
+      # Bandera propia: permite seguir por separado la evolucion del backend
+      # y la del front en Codecov, en vez de ver un solo promedio.
+      - name: Publicar cobertura del front en Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage-web/lcov.info
+          flags: frontend
+          fail_ci_if_error: false
+
+      - name: Resumen de cobertura en la pestana Summary
+        if: always()
+        run: |
+          echo "### Cobertura - Front web (web/js)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          npx vitest run --coverage --coverage.reporter=text-summary >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
   sonarqube:
     name: SonarQube Cloud
-    needs: cobertura
+    # Espera a los dos: analiza Python y JavaScript en un mismo proyecto.
+    needs: [cobertura, front]
     runs-on: ubuntu-latest
 
     # Se declara a nivel de job para poder consultarlo en el "if" del paso:
@@ -90,10 +143,18 @@ jobs:
           # SonarQube usa el historial para asignar los issues a cada autor
           fetch-depth: 0
 
-      - name: Recuperar el reporte de cobertura
+      - name: Recuperar la cobertura de Python
         uses: actions/download-artifact@v4
         with:
           name: cobertura-xml
+
+      # La ruta debe coincidir con sonar.javascript.lcov.reportPaths
+      # declarado en sonar-project.properties.
+      - name: Recuperar la cobertura del front
+        uses: actions/download-artifact@v4
+        with:
+          name: cobertura-lcov
+          path: coverage-web
 
       # Requiere el secreto SONAR_TOKEN, la organizacion correcta en
       # sonar-project.properties y "Automatic Analysis" DESACTIVADO en

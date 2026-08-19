@@ -15,6 +15,17 @@ export default defineConfig({
       all: true,
       reporter: ['text', 'lcov', 'html'],
       reportsDirectory: 'coverage-web',
+
+      // Mismo criterio que fail_under en Python: el umbral se fija por
+      // debajo de la cobertura real para que proteja lo ganado sin ser
+      // fragil, y solo sube cuando la cifra real ya lo supera.
+      // Historial: 0 % (linea base) -> 9.05 % -> 24.51 % -> 46.71 %.
+      thresholds: {
+        statements: 45,
+        branches: 55,
+        functions: 47,
+        lines: 45,
+      },
     },
   },
 });

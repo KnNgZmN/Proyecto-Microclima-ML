@@ -31,9 +31,12 @@ skip_covered = false
 precision    = 2
 
 # Umbral mínimo: falla la build si la cobertura cae por debajo.
-# Línea base medida el 2026-07-28: 57.72 %. Subir este valor a medida que
-# avance el módulo (meta declarada: 80 %).
-fail_under = 95
+#
+# Historial: 57.72 % (línea base, 2026-07-28) → 95 % tras desacoplar el
+# colector del hardware → 99 % con la API del front cubierta.
+# El umbral solo sube cuando la cobertura real ya lo supera de forma
+# estable; nunca al revés. Actual: 99.21 %.
+fail_under = 99
 exclude_also = [
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
