@@ -39,25 +39,62 @@ TIPOS_MIME = {
 ARCHIVO_INDICE = "index.html"
 
 
-def _ruta_estatica(ruta_url: str):
-    """Traduce una ruta de URL a un archivo dentro de web/, o None si es inválida.
+_catalogo_web = None
 
-    Rechaza cualquier ruta que, una vez normalizada, escape del directorio
-    servido (protección contra path traversal).
+
+def _construir_catalogo() -> dict:
+    """Mapa {ruta_url: ruta_absoluta} de todo lo publicable bajo web/.
+
+    Se construye recorriendo el disco, nunca a partir de la peticion. Es la
+    pieza que hace imposible el path traversal: si una ruta no esta en este
+    catalogo, no se sirve, y el catalogo solo contiene archivos que ya estaban
+    dentro de web/.
     """
+    raiz = os.path.realpath(config.WEB_DIR)
+    catalogo = {}
+    for carpeta, _, archivos in os.walk(raiz):
+        for nombre in archivos:
+            absoluta = os.path.join(carpeta, nombre)
+            relativa = os.path.relpath(absoluta, raiz).replace(os.sep, "/")
+            catalogo["/" + relativa] = absoluta
+    return catalogo
+
+
+def _catalogo(recargar: bool = False) -> dict:
+    """Catalogo cacheado; se recarga si aparecen archivos nuevos en desarrollo."""
+    global _catalogo_web
+    if _catalogo_web is None or recargar:
+        _catalogo_web = _construir_catalogo()
+    return _catalogo_web
+
+
+def _clave_estatica(ruta_url: str) -> str:
+    """Normaliza la ruta pedida a la forma que usa el catalogo."""
     ruta = posixpath.normpath(unquote(ruta_url))
     if ruta in ("/", "", "."):
         ruta = "/" + ARCHIVO_INDICE
-
+    # Los segmentos vacios, "." y ".." se descartan: aunque llegaran, no
+    # existe ninguna clave del catalogo que apunte fuera de web/.
     partes = [parte for parte in ruta.split("/") if parte not in ("", ".", "..")]
-    destino = os.path.realpath(os.path.join(config.WEB_DIR, *partes))
-    raiz = os.path.realpath(config.WEB_DIR)
+    return "/" + "/".join(partes)
 
-    if not destino.startswith(raiz + os.sep) and destino != raiz:
-        return None
-    if os.path.isdir(destino):
-        destino = os.path.join(destino, ARCHIVO_INDICE)
-    return destino if os.path.isfile(destino) else None
+
+def _ruta_estatica(ruta_url: str):
+    """Traduce una ruta de URL a un archivo de web/, o None si no se sirve.
+
+    Devuelve siempre un valor tomado del catalogo construido por el servidor,
+    nunca una ruta armada con lo que envio el cliente.
+    """
+    clave = _clave_estatica(ruta_url)
+
+    for candidata in (clave, clave.rstrip("/") + "/" + ARCHIVO_INDICE):
+        destino = _catalogo().get(candidata)
+        if destino is None:
+            # El archivo pudo crearse despues de arrancar el servidor.
+            destino = _catalogo(recargar=True).get(candidata)
+        if destino is not None:
+            return destino
+    return None
 
 
 class ManejadorMicroclima(BaseHTTPRequestHandler):

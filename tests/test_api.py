@@ -416,9 +416,45 @@ def test_ruta_de_localidad_valida_el_identificador(entorno):
 # server
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("ruta", ["/../pyproject.toml", "/..%2fpyproject.toml", "/no-existe.html"])
+# Snyk Code reporta un Path Traversal de severidad ALTA en el open() de
+# _atender_estatico (regla python/PT). Es un falso positivo: el analizador no
+# logra seguir la comprobacion de contencion que hace realpath() + startswith().
+#
+# Esta prueba es la que sostiene esa afirmacion. El silenciamiento declarado en
+# .snyk solo es defendible mientras estos casos sigan pasando: si alguien
+# debilita _ruta_estatica, la suite falla antes de que nadie lo note.
+PAYLOADS_TRAVERSAL = [
+    "/../../../../etc/passwd",
+    "/../api/config.py",
+    "/../../pyproject.toml",
+    "/..%2f..%2fapi/config.py",          # codificado una vez
+    "/%2e%2e/%2e%2e/api/config.py",      # puntos codificados
+    "/....//....//api/config.py",        # duplicado para burlar un filtro ingenuo
+    r"/..\..\Windows\win.ini",          # separadores de Windows
+    "//etc/passwd",
+    "/./../../requirements.txt",
+    "/css/../../api/server.py",          # sale desde un subdirectorio valido
+]
+
+
+@pytest.mark.parametrize("ruta", PAYLOADS_TRAVERSAL)
 def test_ruta_estatica_rechaza_salidas_del_directorio_web(ruta):
     assert server._ruta_estatica(ruta) is None
+
+
+def test_ruta_estatica_rechaza_lo_que_no_existe():
+    assert server._ruta_estatica("/no-existe.html") is None
+
+
+@pytest.mark.parametrize("ruta,esperado", [
+    ("/", "index.html"),
+    ("/index.html", "index.html"),
+    ("/css/estilos.css", "estilos.css"),
+    ("/js/main.js", "main.js"),
+])
+def test_ruta_estatica_sirve_los_archivos_legitimos(ruta, esperado):
+    """El endurecimiento no debe romper lo que si se debe servir."""
+    assert server._ruta_estatica(ruta).endswith(esperado)
 
 
 def test_ruta_estatica_resuelve_el_indice():
