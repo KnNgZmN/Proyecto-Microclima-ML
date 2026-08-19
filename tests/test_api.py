@@ -724,3 +724,54 @@ def test_estado_sin_proceso_previo(colector_limpio):
 def test_listar_puertos_sin_pyserial(monkeypatch):
     monkeypatch.setitem(colector.sys.modules, "serial.tools.list_ports", None)
     assert colector.listar_puertos() == []
+
+
+# ---------------------------------------------------------------------------
+# Validación de los argumentos que llegan al subproceso del colector
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("puerto", ["COM3", "COM12", "/dev/ttyUSB0", "/dev/ttyACM1"])
+def test_puertos_con_formato_valido_se_aceptan(colector_limpio, puerto):
+    colector.iniciar(colector.MODO_REAL, puerto, 9600, 13)
+    comando = colector_limpio[0].comando
+    assert comando[comando.index("--port") + 1] == puerto
+
+
+@pytest.mark.parametrize("puerto", [
+    "COM3; rm -rf /",       # intento de inyección de comandos
+    "COM3 && whoami",
+    "$(whoami)",
+    "/etc/passwd",
+    "",
+    "COM9999",
+])
+def test_puertos_con_formato_invalido_se_rechazan(colector_limpio, puerto):
+    with pytest.raises(SolicitudInvalida):
+        colector.iniciar(colector.MODO_REAL, puerto, 9600, 13)
+    assert colector_limpio == []  # nunca se llegó a lanzar el proceso
+
+
+@pytest.mark.parametrize("baud", [0, 1234, -9600])
+def test_baudios_fuera_de_la_lista_blanca_se_rechazan(colector_limpio, baud):
+    with pytest.raises(SolicitudInvalida):
+        colector.iniciar(colector.MODO_REAL, "COM3", baud, 13)
+
+
+def test_la_simulacion_no_exige_puerto_valido(colector_limpio):
+    """En simulación no se abre ningún puerto, así que el valor es irrelevante."""
+    estado = colector.iniciar(colector.MODO_SIMULACION, "no-es-un-puerto", 9600, 13)
+    assert estado["activo"] is True
+    assert "--port" not in colector_limpio[0].comando
+
+
+def test_baud_no_numerico_por_http_responde_400(servidor, colector_limpio):
+    with pytest.raises(urllib.error.HTTPError) as fallo:
+        _post(servidor, "/api/colector/iniciar", {"modo": "real", "baud": "rapido"})
+    assert fallo.value.code == 400
+
+
+def test_puerto_malicioso_por_http_responde_400(servidor, colector_limpio):
+    with pytest.raises(urllib.error.HTTPError) as fallo:
+        _post(servidor, "/api/colector/iniciar",
+              {"modo": "real", "puerto": "COM3 && whoami", "baud": 9600})
+    assert fallo.value.code == 400

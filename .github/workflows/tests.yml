@@ -39,14 +39,14 @@ jobs:
                  --cov-report=xml \
                  --cov-report=html
 
-      # Reutiliza el coverage.xml del paso anterior: no se vuelve a ejecutar pytest.
-      # Requiere el secreto SONAR_TOKEN (Settings → Secrets and variables → Actions)
-      # y que "Automatic Analysis" esté DESACTIVADO en SonarQube Cloud.
-      - name: Análisis de SonarQube Cloud
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: SonarSource/sonarqube-scan-action@v6
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      # El reporte se pasa al job de SonarQube en lugar de volver a correr pytest.
+      - name: Guardar coverage.xml para SonarQube
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-xml
+          path: coverage.xml
+          retention-days: 1
 
       - name: Publicar cobertura en Codecov
         uses: codecov/codecov-action@v5
@@ -72,3 +72,36 @@ jobs:
           # '|| true': el umbral ya lo aplica el paso de pytest; aquí solo se muestra
           coverage report >> $GITHUB_STEP_SUMMARY || true
           echo '```' >> $GITHUB_STEP_SUMMARY
+
+  sonarqube:
+    name: SonarQube Cloud
+    needs: cobertura
+    runs-on: ubuntu-latest
+
+    # Se declara a nivel de job para poder consultarlo en el "if" del paso:
+    # sin el secreto configurado el analisis se omite en vez de fallar.
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+        with:
+          # SonarQube usa el historial para asignar los issues a cada autor
+          fetch-depth: 0
+
+      - name: Recuperar el reporte de cobertura
+        uses: actions/download-artifact@v4
+        with:
+          name: cobertura-xml
+
+      # Requiere el secreto SONAR_TOKEN, la organizacion correcta en
+      # sonar-project.properties y "Automatic Analysis" DESACTIVADO en
+      # SonarQube Cloud (si esta activo, el analisis de CI da error).
+      - name: Analizar con SonarQube Cloud
+        if: env.SONAR_TOKEN != ''
+        uses: SonarSource/sonarqube-scan-action@v6
+
+      - name: Avisar si falta el secreto
+        if: env.SONAR_TOKEN == ''
+        run: echo "::warning::SONAR_TOKEN no esta configurado; se omitio el analisis de SonarQube."

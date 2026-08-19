@@ -1,7 +1,10 @@
 [tool.pytest.ini_options]
 # src/ no es un paquete instalable y los módulos se importan de forma plana
 # (ej. "from feature_engineering import ..."), por lo que se agrega al sys.path.
-pythonpath = ["src"]
+# "." añade la raíz del proyecto para poder importar el paquete api/; sin ella
+# el ejecutable `pytest` falla en CI (a diferencia de `python -m pytest`, que
+# inserta el directorio actual en sys.path por su cuenta).
+pythonpath = ["src", "."]
 testpaths  = ["tests"]
 addopts    = "-q --strict-markers"
 

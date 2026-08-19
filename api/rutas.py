@@ -107,13 +107,21 @@ def _colector_estado(_peticion: Peticion) -> Respuesta:
     return Respuesta(colector.estado())
 
 
+def _entero_del_cuerpo(cuerpo: dict, clave: str, defecto: int) -> int:
+    """Entero de un campo del cuerpo JSON, con error 400 si no es convertible."""
+    try:
+        return int(cuerpo.get(clave, defecto))
+    except (TypeError, ValueError) as error:
+        raise servicios.SolicitudInvalida(f"{clave} debe ser un entero") from error
+
+
 def _colector_iniciar(peticion: Peticion) -> Respuesta:
     cuerpo = peticion.cuerpo
     return Respuesta(colector.iniciar(
         modo=str(cuerpo.get("modo", colector.MODO_SIMULACION)),
         puerto=str(cuerpo.get("puerto", "COM3")),
-        baud=int(cuerpo.get("baud", 9600)),
-        localidad_id=int(cuerpo.get("localidad_id", config.LOCALIDAD_DEFECTO)),
+        baud=_entero_del_cuerpo(cuerpo, "baud", 9600),
+        localidad_id=_entero_del_cuerpo(cuerpo, "localidad_id", config.LOCALIDAD_DEFECTO),
     ))
 
 

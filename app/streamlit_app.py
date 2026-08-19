@@ -2,6 +2,7 @@ import subprocess
 import sys
 import os
 import json
+import re
 from datetime import datetime
 
 import streamlit as st
@@ -22,6 +23,10 @@ DATA_PATH    = os.path.join(_base_dir, "data", "raw", "data.csv")
 MODEL_PATH   = os.path.join(_base_dir, "models", "model.pkl")
 METRICS_PATH = os.path.join(_base_dir, "models", "metrics.json")
 LIVE_PATH    = os.path.join(_base_dir, "data", "live", "latest.json")
+
+# El puerto llega de un campo de texto y termina en los argumentos de un
+# subproceso: se valida con lista blanca en el propio punto de llamada.
+PATRON_PUERTO = re.compile(r"^(COM[0-9]{1,3}|/dev/tty[A-Za-z0-9._-]{1,20})$")
 
 _NOMBRE_A_ID = {v["nombre"]: k for k, v in LOCALIDADES.items()}
 _NOMBRES_ORD = [LOCALIDADES[i]["nombre"] for i in sorted(LOCALIDADES)]
@@ -499,7 +504,12 @@ with tab_arduino:
 
     with cb1:
         if st.button("▶ Iniciar Arduino real", disabled=proc_running, use_container_width=True):
-            if ard_port not in puertos_disponibles and puertos_disponibles:
+            if not PATRON_PUERTO.match(ard_port):
+                st.session_state.arduino_error = (
+                    f"Puerto **{ard_port}** con formato inválido. "
+                    "Usa COM3 (Windows) o /dev/ttyUSB0 (Linux/macOS)."
+                )
+            elif ard_port not in puertos_disponibles and puertos_disponibles:
                 st.session_state.arduino_error = (
                     f"Puerto **{ard_port}** no detectado. "
                     f"Puertos disponibles: {', '.join(puertos_disponibles)}"
@@ -508,9 +518,9 @@ with tab_arduino:
                 st.session_state.arduino_error = None
                 cmd = [
                     sys.executable, _collector,
-                    "--port", ard_port,
-                    "--baud", str(ard_baud),
-                    "--localidad", str(ard_loc_id),
+                    "--port", PATRON_PUERTO.match(ard_port).group(0),
+                    "--baud", str(int(ard_baud)),
+                    "--localidad", str(int(ard_loc_id)),
                     "--predict",
                 ]
                 st.session_state.arduino_proc = subprocess.Popen(
