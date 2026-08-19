@@ -3,8 +3,11 @@
 Sistema de predicción de temperatura a **30 minutos** para las **20 localidades de Bogotá D.C.**, combinando sensores ambientales IoT (Arduino) con Machine Learning calibrado sobre física real del clima bogotano.
 
 [![Pruebas y Cobertura](https://github.com/KnNgZmN/Proyecto-Microclima-ML/actions/workflows/tests.yml/badge.svg)](https://github.com/KnNgZmN/Proyecto-Microclima-ML/actions/workflows/tests.yml)
+[![Seguridad](https://github.com/KnNgZmN/Proyecto-Microclima-ML/actions/workflows/seguridad.yml/badge.svg)](https://github.com/KnNgZmN/Proyecto-Microclima-ML/actions/workflows/seguridad.yml)
 [![codecov](https://codecov.io/gh/KnNgZmN/Proyecto-Microclima-ML/branch/main/graph/badge.svg)](https://codecov.io/gh/KnNgZmN/Proyecto-Microclima-ML)
-![Pruebas](https://img.shields.io/badge/pruebas-260%20passed-brightgreen)
+[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=KnNgZmN_Proyecto-Microclima-ML&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=KnNgZmN_Proyecto-Microclima-ML)
+[![Mantenibilidad](https://sonarcloud.io/api/project_badges/measure?project=KnNgZmN_Proyecto-Microclima-ML&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=KnNgZmN_Proyecto-Microclima-ML)
+[![Seguridad Sonar](https://sonarcloud.io/api/project_badges/measure?project=KnNgZmN_Proyecto-Microclima-ML&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=KnNgZmN_Proyecto-Microclima-ML)
 
 ---
 
@@ -20,7 +23,7 @@ Sistema de predicción de temperatura a **30 minutos** para las **20 localidades
 7. [Modelo de Machine Learning — Random Forest](#7-modelo-de-machine-learning--random-forest)
 8. [Flujo completo del sistema](#8-flujo-completo-del-sistema)
 9. [Resultados del modelo](#9-resultados-del-modelo)
-10. [Aplicación web (Streamlit)](#10-aplicación-web-streamlit)
+10. [Las dos interfaces web](#10-las-dos-interfaces-web)
 11. [Integración con Arduino](#11-integración-con-arduino)
 
 ### Parte 2 — Guía paso a paso (desde cero en Windows)
@@ -40,6 +43,9 @@ Sistema de predicción de temperatura a **30 minutos** para las **20 localidades
 ### Parte 3 — Calidad y métricas del software (8.º semestre)
 24. [Pruebas automatizadas y cobertura](#24-pruebas-automatizadas-y-cobertura)
 25. [Integración continua (GitHub Actions)](#25-integración-continua-github-actions)
+26. [Seguridad del software — Snyk](#26-seguridad-del-software--snyk)
+27. [Calidad de código y deuda técnica — SonarQube](#27-calidad-de-código-y-deuda-técnica--sonarqube)
+28. [El antes y el después](#28-el-antes-y-el-después)
 
 ---
 
@@ -90,7 +96,14 @@ El modelo recibe **19 variables de entrada** (features) y produce **1 predicció
 
 ### La aplicación web
 
-Una interfaz construida con Streamlit muestra en tiempo real los datos del Arduino, las predicciones, comparativas entre localidades y controles del sistema — accesible desde cualquier navegador.
+El proyecto tiene **dos interfaces** que muestran lo mismo —datos del Arduino en vivo, predicciones, comparativas entre localidades y control del colector— con tecnologías distintas:
+
+| Interfaz | Cómo se levanta | Rol |
+|----------|-----------------|-----|
+| **Panel web** (`web/` + `api/`) | `python -m api.server` | La actual. HTML, CSS y módulos ES nativos sobre una API REST en Python estándar |
+| **Streamlit** (`app/`) | `streamlit run app/streamlit_app.py` | El prototipo original de 7.º semestre. Se conserva funcional |
+
+El panel de `web/` se construyó para el módulo de Calidad y Métricas: al estar escrito en JavaScript con módulos separados, **es analizable por SonarQube y medible con Vitest**, cosa que la interfaz de Streamlit —donde la lógica y la presentación viven en el mismo archivo— no permite.
 
 ---
 
@@ -451,7 +464,7 @@ La mejora proviene de dos factores: 10× más datos de entrenamiento y las 4 fea
 
 ---
 
-## 10. Aplicación web (Streamlit)
+## 10. Las dos interfaces web
 
 La app tiene **4 pestañas** y se refresca automáticamente cada 5 segundos para mostrar datos del Arduino en vivo.
 
@@ -586,13 +599,24 @@ ProyectoMicroclima/
 │       ├── graficos.js           # Gráficas sobre <canvas>
 │       └── vistas/               # Una pestaña por archivo
 │
-├── tests/                        # Suite de pruebas — 260 casos
+├── tests/                        # Pruebas de Python — 376 casos
 │   ├── conftest.py               # Fixtures compartidas y doble del modelo
+│   ├── test_api.py               # Endpoints, servicios y control del colector
+│   ├── test_arduino_collector.py # Interpretación serial, validación y persistencia
 │   ├── test_data_processing.py   # Saneamiento e interpolación
 │   ├── test_feature_engineering.py  # Features, ciclos y aislamiento por localidad
 │   ├── test_localidades.py       # Integridad del catálogo de 20 localidades
-│   ├── test_predict.py           # Inferencia con modelo simulado
-│   └── test_arduino_collector.py # Validación de rangos y persistencia
+│   └── test_predict.py           # Inferencia con modelo simulado
+│
+├── tests-web/                    # Pruebas del front — 259 casos (Vitest)
+│   ├── main.test.js              # Arranque, pestañas y refresco automático
+│   ├── api.test.js               # Cliente REST con fetch simulado
+│   ├── dom.test.js               # Construcción de nodos
+│   ├── componentes.test.js       # Campos, botones e insignias
+│   ├── estado.test.js            # Estado compartido
+│   ├── formato.test.js           # Formateo con la convención es-CO
+│   ├── graficos.test.js          # Canvas con contexto 2D simulado
+│   └── vistas-*.test.js          # Una por pestaña del panel
 │
 ├── docs/
 │   ├── cobertura-alcance.md      # Alcance de la medición y exclusiones
@@ -600,10 +624,16 @@ ProyectoMicroclima/
 │
 ├── .github/
 │   └── workflows/
-│       └── tests.yml             # CI: pytest + cobertura en cada push y PR
+│       ├── tests.yml             # CI: pytest + vitest + cobertura + SonarQube
+│       └── seguridad.yml         # CI: Snyk en cada cambio y todos los lunes
 │
-├── pyproject.toml                # Configuración de pytest y coverage
+├── pyproject.toml                # Configuración de pytest y coverage (Python)
+├── vitest.config.js              # Configuración de Vitest y cobertura (front)
+├── package.json                  # Dependencias del front
+├── sonar-project.properties      # Alcance del análisis de SonarQube
+├── codecov.yml                   # Umbrales de Codecov y diff coverage
 ├── requirements.txt              # Dependencias de ejecución
+├── requirements.lock             # Cierre transitivo fijado — lo audita Snyk
 ├── requirements-dev.txt          # Dependencias de desarrollo y pruebas
 ├── CONTEXTO_EXPOSICION.md        # Glosario técnico para la exposición
 └── README.MD                     # Este archivo
@@ -617,10 +647,15 @@ ProyectoMicroclima/
 
 | Requisito | Versión mínima | Notas |
 |-----------|---------------|-------|
-| Python | 3.9 | 3.10, 3.11 o 3.12 también funcionan |
+| Python | 3.9 | 3.10 a 3.13 también funcionan |
 | pip | Incluido con Python | Instalador de paquetes |
 | Git | Cualquiera | Solo si clonas el repositorio |
-| Navegador web | Chrome, Firefox, Edge | Para la app Streamlit |
+| Navegador web | Chrome, Firefox, Edge | Para el panel web |
+| Node.js | 20 | **Solo** para ejecutar las pruebas del front |
+
+> Node.js no hace falta para *usar* el proyecto: el panel de `web/` son módulos
+> ES nativos que el navegador carga directamente, y lo sirve el servidor de
+> Python. Solo se necesita si vas a correr las pruebas de JavaScript.
 
 ### Hardware (opcional — solo para fase real)
 
@@ -656,6 +691,20 @@ Solo hacen falta para ejecutar las pruebas. No son necesarias para usar la aplic
 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
+```
+
+### Dependencias del front (`package.json`)
+
+Solo para ejecutar las pruebas de JavaScript.
+
+| Paquete | Uso |
+|---------|-----|
+| `vitest` | Ejecución de las pruebas del front |
+| `@vitest/coverage-v8` | Medición de cobertura, genera el `lcov.info` que consume SonarQube |
+| `jsdom` | DOM simulado para probar los módulos que manipulan la página |
+
+```bash
+npm install
 ```
 
 ---
@@ -827,6 +876,30 @@ Al terminar, el archivo `models/model.pkl` contiene el modelo listo para predeci
 
 ## Paso 7 — Lanzar la aplicación web
 
+Hay dos interfaces. **La recomendada es el panel web**, que no necesita instalar nada más allá de las dependencias del proyecto.
+
+### Opción A — Panel web (recomendada)
+
+```bash
+python -m api.server
+```
+
+Y abre en el navegador:
+
+```
+http://127.0.0.1:8000
+```
+
+Para servirlo en otro puerto o exponerlo en la red local:
+
+```bash
+python -m api.server --host 0.0.0.0 --puerto 8080
+```
+
+La documentación de la API y de su arquitectura está en **[docs/front-web.md](docs/front-web.md)**.
+
+### Opción B — Streamlit (prototipo original)
+
 ```bash
 streamlit run app/streamlit_app.py
 ```
@@ -839,7 +912,7 @@ http://localhost:8501
 
 Si el navegador no se abre solo, copia esa URL y pégala manualmente en Chrome, Firefox o Edge.
 
-**Para detener la aplicación:** presiona `Ctrl + C` en la terminal.
+**Para detener cualquiera de las dos:** presiona `Ctrl + C` en la terminal.
 
 **Qué hacer en la app:**
 1. En la **Pestaña 1** verás los datos históricos del dataset y una predicción automática para Teusaquillo
@@ -1033,12 +1106,19 @@ La cobertura de ramas es la más estricta y es la que exige la guía. Un `if` cu
 
 La guía de la docente lista JaCoCo (Java) e Istanbul/c8 (JavaScript), que no aplican a un proyecto Python. Las equivalencias adoptadas son:
 
-| Herramienta de la guía | Equivalente adoptado | Función |
-|------------------------|----------------------|---------|
-| JaCoCo / Istanbul | `coverage.py` + `pytest-cov` | Motor de medición de líneas y ramas |
-| Codecov | Codecov | Histórico y *diff coverage* de cada PR |
+| Herramienta de la guía | Ecosistema | Equivalente adoptado |
+|------------------------|-----------|----------------------|
+| JaCoCo | Java / JVM | — (el backend es Python) |
+| **Istanbul / c8** | JavaScript | **Vitest + `@vitest/coverage-v8`** — el front sí usa la herramienta que nombra la guía |
+| — | Python | `coverage.py` + `pytest-cov` |
+| **Codecov** | Nube | **Codecov**, con banderas separadas `backend` y `frontend` |
+
+El proyecto tiene dos lenguajes, así que se miden por separado y se publican
+con banderas distintas: un promedio único escondería las dos historias.
 
 ### Cómo ejecutar las pruebas
+
+**Backend (Python):**
 
 ```bash
 # Instalar las dependencias de desarrollo (solo la primera vez)
@@ -1047,14 +1127,29 @@ pip install -r requirements.txt -r requirements-dev.txt
 # Ejecutar toda la suite
 pytest
 
-# Ejecutar con reporte de cobertura en la terminal
+# Con reporte de cobertura en la terminal
 pytest --cov --cov-branch --cov-report=term-missing
 
 # Generar el reporte HTML navegable
 pytest --cov --cov-report=html
 ```
 
-El reporte HTML queda en `htmlcov/index.html`. Ábrelo en el navegador: muestra el código fuente coloreado, en verde lo cubierto y en rojo lo que ninguna prueba ejecuta.
+**Front (JavaScript):**
+
+```bash
+# Instalar las dependencias del front (solo la primera vez)
+npm install
+
+# Ejecutar las pruebas
+npm test
+
+# Con reporte de cobertura
+npm run coverage
+```
+
+Los reportes HTML quedan en `htmlcov/index.html` (Python) y `coverage-web/index.html` (front). Ábrelos en el navegador: muestran el código fuente coloreado, en verde lo cubierto y en rojo lo que ninguna prueba ejecuta.
+
+> **Si `pytest` no se reconoce como comando**, usa `python -m pytest`. Ocurre con las instalaciones de Python desde Microsoft Store, que no agregan la carpeta de ejecutables al `PATH`.
 
 Las pruebas **no dependen del dataset ni del modelo entrenado**. `data/raw/data.csv` y `models/model.pkl` se generan localmente y están en `.gitignore`, así que no existen en el servidor de integración continua. La suite sustituye el modelo por un doble de prueba y redirige las escrituras a directorios temporales, por lo que corre en una copia recién clonada del repositorio.
 
@@ -1064,21 +1159,38 @@ Línea base medida **antes** de escribir cualquier prueba, para poder documentar
 
 | Indicador | Antes | Ahora |
 |-----------|-------|-------|
-| Pruebas automatizadas | 0 | **260** |
-| Cobertura total (líneas + ramas) | 0.00 % | **100.00 %** |
-| Cobertura del núcleo lógico | 0.00 % | **100.00 %** |
-| Sentencias sin cubrir | 266 | **0** |
+| Pruebas automatizadas | 0 | **635** |
+| Cobertura del backend | 0.00 % | **99.21 %** |
+| Cobertura del front | sin medir | **98.93 %** |
+| Sentencias medidas | 266 | **1 388** |
 
-Desglose por módulo:
+**Backend — Python (`api/` y `src/`):**
 
 | Módulo | Sentencias | Sin cubrir | Cobertura |
 |--------|-----------:|-----------:|----------:|
-| `src/data_processing.py` | 18 | 0 | **100.00 %** |
-| `src/feature_engineering.py` | 60 | 0 | **100.00 %** |
-| `src/localidades.py` | 4 | 0 | **100.00 %** |
-| `src/predict.py` | 22 | 0 | **100.00 %** |
 | `src/arduino_collector.py` | 191 | 0 | **100.00 %** |
-| **TOTAL** | **295** | **0** | **100.00 %** |
+| `src/feature_engineering.py` | 60 | 0 | **100.00 %** |
+| `src/predict.py` | 22 | 0 | **100.00 %** |
+| `src/data_processing.py` | 18 | 0 | **100.00 %** |
+| `src/localidades.py` | 4 | 0 | **100.00 %** |
+| `api/server.py` | 143 | 0 | **99.44 %** |
+| `api/servicios.py` | 150 | 1 | **98.96 %** |
+| `api/rutas.py` | 73 | 0 | **100.00 %** |
+| `api/colector.py` | 86 | 1 | **97.32 %** |
+| `api/repositorio.py` | 60 | 1 | **97.22 %** |
+| `api/config.py` | 18 | 0 | **100.00 %** |
+| **TOTAL** | **825** | **3** | **99.21 %** |
+
+**Front — JavaScript (`web/js/`):**
+
+| Métrica | Cubierto | Total | Cobertura |
+|---------|---------:|------:|----------:|
+| Sentencias | 557 | 563 | **98.93 %** |
+| Ramas | 200 | 204 | **98.03 %** |
+| Funciones | 159 | 164 | **96.95 %** |
+| Líneas | 533 | 539 | **98.88 %** |
+
+Los seis módulos de `web/js/` y las cuatro vistas están al **100 %**; lo que falta son ramas sueltas de `api.js`, `graficos.js` y `main.js`.
 
 ### Qué cubre cada archivo de pruebas
 
@@ -1089,6 +1201,21 @@ Desglose por módulo:
 | `test_predict.py` | 31 | La inferencia para las 20 localidades, el fallback ante una localidad desconocida y la carga perezosa del modelo |
 | `test_arduino_collector.py` | 68 | La interpretación de la línea serial en sus formatos de 4, 3 y 2 valores, la validación de rangos, la persistencia en CSV y JSON, y el bucle de lectura completo contra un puerto simulado |
 | `test_data_processing.py` | 15 | La detección de valores fuera de rango y su interpolación lineal |
+| `test_api.py` | 116 | Los endpoints REST, las agregaciones del dataset, el control del subproceso colector y la resolución de archivos estáticos |
+
+**Pruebas del front (`tests-web/`, 259 casos):**
+
+| Archivo | Qué verifica |
+|---------|--------------|
+| `main.test.js` | El arranque completo del panel: pestañas, navegación, refresco automático y rebote de la redimensión. Aquí las vistas **no** se simulan, así que también se comprueba que las cuatro se integran |
+| `vistas-arduino.test.js` | Control del colector, sugerencia de puerto, insignias de frescura y el envío de la lectura a la pestaña de predicción |
+| `vistas-historicos.test.js` | Las cuatro consultas en paralelo, el contexto de la localidad y la insignia según el origen del dato |
+| `vistas-prediccion.test.js` | El formulario, qué se envía al backend, el historial de sesión y el manejo del error |
+| `vistas-comparativa.test.js` | La tabla de estadísticas y el aviso cuando el dataset no distingue localidades |
+| `graficos.test.js` | Las gráficas sobre `<canvas>` con un contexto 2D simulado, incluidos los casos que rompen una escala |
+| `api.test.js` | El armado de la petición, la serialización de parámetros y la traducción de errores del backend |
+| `dom.test.js` · `componentes.test.js` | La construcción de nodos y las piezas reutilizables de la interfaz |
+| `estado.test.js` · `formato.test.js` | El estado compartido y el formateo con la convención `es-CO` |
 
 ### Alcance de la medición y deuda conocida
 
@@ -1106,25 +1233,43 @@ El detalle completo del alcance, las exclusiones y su justificación está en **
 
 ## 25. Integración continua (GitHub Actions)
 
-Cada `push` y cada Pull Request hacia `main` dispara automáticamente el flujo definido en `.github/workflows/tests.yml`:
+Hay **dos flujos**, y cada `push` y cada Pull Request hacia `main` los dispara automáticamente.
 
-1. Descarga el repositorio con su historial completo (Codecov lo necesita para el *diff coverage*)
-2. Instala Python 3.13 y las dependencias de desarrollo
-3. Ejecuta las 260 pruebas midiendo líneas y ramas
-4. Publica el resultado en Codecov
-5. Adjunta el reporte HTML como artefacto descargable (30 días)
-6. Escribe un resumen de cobertura en la pestaña **Summary** de la ejecución
+### `tests.yml` — Pruebas y cobertura
 
-### Umbral de regresión
+Tres trabajos encadenados:
 
-`pyproject.toml` define `fail_under = 95`. Si un cambio hace caer la cobertura por debajo del 95 %, **la build falla**. Es la alerta por caída de porcentaje que menciona la guía, y evita que se agregue código sin pruebas sin que nadie lo note.
+| Trabajo | Qué hace |
+|---------|----------|
+| `pytest + coverage` | Instala Python 3.13, corre las **376** pruebas midiendo líneas y ramas, publica en Codecov con la bandera `backend` |
+| `vitest + coverage` | Instala Node con `npm ci`, corre las **259** pruebas del front, publica con la bandera `frontend` |
+| `SonarQube Cloud` | Espera a los dos, recoge sus reportes y analiza Python y JavaScript en un mismo proyecto |
 
-El umbral se fija en 95 y no en 100 de forma deliberada: un umbral igual a la cobertura actual rompe la build ante cualquier línea nueva, incluso legítima, y empuja al equipo a desactivarlo. 95 deja margen sin permitir que la cobertura se desplome.
+`npm ci` en lugar de `npm install` es deliberado: instala exactamente lo que fija `package-lock.json`, así que la ejecución es reproducible.
+
+### `seguridad.yml` — Snyk
+
+Se detalla en la [sección 26](#26-seguridad-del-software--snyk). Corre en cada cambio **y todos los lunes**, porque un CVE puede publicarse sin que el código cambie.
+
+### Umbrales de regresión
+
+| Dónde | Umbral | Cobertura real |
+|-------|-------:|---------------:|
+| `pyproject.toml` → `fail_under` | **99** | 99,21 % |
+| `vitest.config.js` → `thresholds.statements` | **98** | 98,93 % |
+| `vitest.config.js` → `thresholds.branches` | **97** | 98,03 % |
+
+Si un cambio hace caer la cobertura por debajo, **la build falla**. Es la alerta por caída de porcentaje que menciona la guía.
+
+El criterio para fijarlos es siempre el mismo: **el umbral va por debajo de la cifra real y solo sube cuando la cobertura ya lo superó de forma estable, nunca al revés**. Un umbral igual a la cobertura actual rompe la build ante cualquier línea nueva, incluso legítima, y empuja al equipo a desactivarlo.
+
+Historial del umbral de Python: 55 → 95 → 99, siguiendo a la cobertura real (57,72 % → 100 % → 99,21 %).
 
 ### Consultar los resultados
 
 - **Pestaña Actions** del repositorio → última ejecución → *Summary* para la tabla de cobertura
 - **Artefacto `reporte-cobertura-html`** → descargar y abrir `index.html` para el detalle línea por línea
+- **[Panel de SonarQube Cloud](https://sonarcloud.io/summary/new_code?id=KnNgZmN_Proyecto-Microclima-ML)** → calidad, complejidad y deuda técnica
 
 ### Integración con Codecov
 
@@ -1151,6 +1296,187 @@ Cuando la cobertura no es total, las dos herramientas reportan cifras distintas.
 **La cifra oficial del proyecto es la de `coverage.py`**, porque incluye cobertura de ramas, que es la métrica que exige la sección 4 de la guía. La de Codecov se usa para leer la evolución temporal.
 
 Al alcanzar el 100 % la diferencia desaparece: sin sentencias sin cubrir ni ramas parciales, ambas fórmulas dan el mismo resultado. La distinción vuelve a importar en cuanto la cobertura baje del total, así que conviene tenerla presente.
+
+---
+
+## 26. Seguridad del software — Snyk
+
+Corresponde a la **sección 5 de la guía** (Seguridad del Software — DevSecOps). Snyk hace dos análisis distintos que conviene no confundir:
+
+| Análisis | Qué revisa | En este proyecto |
+|----------|-----------|------------------|
+| **Snyk Open Source** (SCA) | Dependencias de terceros con CVE conocidos | Las **52** dependencias del árbol completo |
+| **Snyk Code** (SAST) | El código fuente propio | Los módulos de `api/` y `src/` |
+
+### Cómo ejecutarlo
+
+```bash
+npm install -g snyk        # una sola vez
+snyk auth                  # abre el navegador para autenticar
+
+snyk test --file=requirements.lock --package-manager=pip   # dependencias
+snyk code test                                             # código propio
+```
+
+### Por qué existe `requirements.lock`
+
+Los dos primeros escaneos **fallaron**, antes de ver un solo hallazgo:
+
+```
+ERROR  Missing required packages (SNYK-OS-PYTHON-0013)
+Status: 422 Unprocessable Entity
+```
+
+La causa: todas las dependencias estaban declaradas con rango abierto (`pandas>=1.5.0`). Sin versiones exactas no hay un árbol determinista que auditar. **No se puede auditar lo que no está fijado.**
+
+`requirements.lock` fija el cierre transitivo con versiones exactas. `requirements.txt` sigue siendo el manifiesto que se edita a mano; el `.lock` es lo que se audita.
+
+Al resolverlo apareció otro problema: `streamlit`, `streamlit-autorefresh` y `pyserial` estaban **declarados pero no instalados**. Al instalarlos, el árbol pasó de 18 a **52 paquetes** — casi el triple de superficie de la que se veía al empezar.
+
+### Los hallazgos
+
+El primer escaneo válido encontró **10 vulnerabilidades, 8 de severidad alta**, todas en `pillow@12.2.0`:
+
+| Vulnerabilidad | Cantidad | Qué significa |
+|----------------|---------:|---------------|
+| Memory Allocation with Excessive Size Value | 4 | Una imagen manipulada pide memoria sin límite |
+| Out-of-bounds Write | 2 | Escribir fuera del espacio reservado |
+| Out-of-bounds Read | 1 | Leer memoria que no corresponde |
+| Allocation of Resources Without Limits | 1 | Consumo de recursos hasta agotar la máquina |
+| Infinite loop | 1 | Una imagen que nunca termina de procesarse |
+| Command Injection | 1 | Ejecución de comandos del sistema |
+
+**`pillow` no estaba en `requirements.txt`.** Lo arrastra `matplotlib`, que declara `pillow>=9`. Se pidió una librería de gráficas y llegó, sin que nadie lo eligiera, un decodificador de imágenes con ocho vulnerabilidades altas.
+
+De las 52 dependencias, solo **8 fueron decisión del equipo**. Las otras 44 son heredadas.
+
+### La corrección
+
+Actualizar el paquete arregla el problema de hoy; fijarlo en el manifiesto evita que vuelva mañana:
+
+```
+# pillow lo introduce matplotlib (pillow>=9). La 12.2.0 acumulaba
+# 10 CVE, 8 de severidad alta. Corregidas en 12.3.0.
+pillow>=12.3.0
+```
+
+Sin esa restricción explícita, una instalación futura en otra máquina podría volver a resolver la versión vulnerable. Se fija una dependencia que **no se usa directamente**, solo por seguridad.
+
+### El falso positivo, y por qué no se silenció
+
+Snyk Code reportó un **Path Traversal de severidad alta** (`python/PT`) en el `open()` que sirve los archivos estáticos.
+
+La sanitización era correcta: normalizaba la ruta, descartaba los segmentos `..`, resolvía con `realpath` y exigía contención en `web/`. Se probaron **10 payloads** —codificados, con separadores de Windows, con puntos duplicados, saliendo desde subdirectorios válidos— y los 10 quedaron bloqueados. Era un falso positivo: el analizador no sabe seguir una comprobación basada en `realpath()` + `startswith()`.
+
+Se intentó declararlo en `.snyk`, pero **ese archivo solo aplica a Snyk Open Source**: Snyk Code lo ignoró por completo (`Ignored issues: 0`). Las alternativas restantes —bajar el umbral, excluir el archivo, tapar la salida del comando— debilitaban el control para *todo* el código.
+
+Así que se eliminó la causa. Los estáticos se sirven ahora desde un **catálogo** `{ruta_url: ruta_absoluta}` que el servidor construye recorriendo `web/`. La ruta que llega a `open()` sale siempre de ese catálogo, nunca de la petición: el traversal deja de ser algo que *se comprueba* y pasa a ser **imposible por construcción**.
+
+La garantía queda protegida por `tests/test_api.py::test_ruta_estatica_rechaza_salidas_del_directorio_web`, con los 10 payloads.
+
+### Resultado
+
+```
+snyk test --file=requirements.lock   →  52 dependencias, 0 vulnerabilidades
+snyk code test                       →  Total issues: 0
+```
+
+El proyecto está además en **monitoreo continuo**: Snyk avisa por correo si aparece un CVE nuevo en cualquiera de las 52 dependencias, aunque nadie toque el repositorio.
+
+### Automatización
+
+`.github/workflows/seguridad.yml` corre los dos análisis en cada `push`, en cada PR y **todos los lunes**. Lo último es deliberado: un CVE puede publicarse sin que el código cambie, así que el análisis debe repetirse por calendario y no solo por commit.
+
+> **Detalle de configuración.** Snyk inspecciona el **entorno instalado**, no solo el archivo declarado. En CI hay que instalar las dependencias antes de auditarlas o falla con el mismo `SNYK-OS-PYTHON-0013`. De paso, eso comprueba que el `.lock` sea instalable.
+
+Requiere el secreto `SNYK_TOKEN` (Settings → Secrets and variables → Actions).
+
+---
+
+## 27. Calidad de código y deuda técnica — SonarQube
+
+Corresponde a la **sección 1 de la guía**. SonarQube Cloud analiza **Python y JavaScript en un mismo proyecto**, y consume los reportes de cobertura que ya producen las otras herramientas: `coverage.xml` de `pytest` y `lcov.info` de Vitest.
+
+Es la pieza que cierra un hueco declarado desde el principio: la guía asocia la **complejidad ciclomática** a JaCoCo, y `coverage.py` no la calcula. SonarQube sí.
+
+### Configuración
+
+`sonar-project.properties` define el alcance:
+
+```properties
+sonar.sources=api,src,web
+sonar.tests=tests,tests-web
+sonar.python.coverage.reportPaths=coverage.xml
+sonar.javascript.lcov.reportPaths=coverage-web/lcov.info
+sonar.coverage.exclusions=src/generate_dataset.py,src/train_model.py,src/visualization.py
+```
+
+Dos decisiones que conviene explicar:
+
+**Las mayúsculas importan.** La organización va en minúsculas (`knngzmn`) y la clave del proyecto conserva el nombre de usuario (`KnNgZmN_Proyecto-Microclima-ML`). Así las asigna SonarQube; equivocarlas rompe el análisis.
+
+**El alcance de cobertura debe coincidir con `pyproject.toml`.** Los tres scripts excluidos son los mismos que omite `coverage.py`, por la misma razón: ejecutan todo su cuerpo al importarse. Si los alcances no coinciden, las dos herramientas reportan cifras distintas sobre el mismo código y nadie entiende cuál creer. Se siguen **analizando** —sus *code smells* y su complejidad sí cuentan—, solo que no se les exige cobertura.
+
+### Métricas obtenidas
+
+| Métrica | Valor | Calificación |
+|---------|------:|:------------:|
+| Líneas de código analizadas | 3 251 | — |
+| Bugs | **0** | **A** |
+| Vulnerabilidades | **0** | **A** |
+| Puntos calientes de seguridad | **0** | — |
+| *Code smells* | 3 | **A** |
+| Deuda técnica | 28 min | — |
+| Duplicación | **0,0 %** | — |
+| **Complejidad ciclomática** | **524** | — |
+| Complejidad cognitiva | 303 | — |
+
+Las tres calificaciones —fiabilidad, seguridad y mantenibilidad— están en **A**, y la deuda técnica total es de 28 minutos.
+
+### Un hallazgo que cerró dos herramientas a la vez
+
+El primer análisis reportó **12 vulnerabilidades** y una calificación de seguridad **C**. No hubo que revisarlas una por una: eran variantes del mismo flujo de *path traversal* que Snyk había señalado, así que **el refactor del servidor de estáticos las cerró todas de golpe** y la calificación subió de C a A.
+
+Es un buen ejemplo de por qué conviene tener varias herramientas midiendo: Snyk y SonarQube aplican reglas distintas sobre el mismo código, pero una sola corrección estructural puede resolver lo que ambas señalan.
+
+### Consultar los resultados
+
+**[Panel del proyecto en SonarQube Cloud](https://sonarcloud.io/summary/new_code?id=KnNgZmN_Proyecto-Microclima-ML)** — público, no hace falta cuenta para verlo.
+
+Requiere el secreto `SONAR_TOKEN` y que **«Automatic Analysis» esté desactivado** en la configuración del proyecto: si está activo, choca con el análisis que lanza el CI y este falla.
+
+---
+
+## 28. El antes y el después
+
+Tres métricas de la guía aplicadas sobre el mismo proyecto, en orden cronológico.
+
+| Indicador | Antes | Ahora |
+|-----------|------:|------:|
+| Pruebas automatizadas | 0 | **635** |
+| Cobertura del backend (líneas + ramas) | 0,00 % | **99,21 %** |
+| Cobertura del front | sin medir | **98,93 %** |
+| Vulnerabilidades en dependencias | 10 (8 altas) | **0** |
+| Problemas en el código propio (SAST) | 1 alta | **0** |
+| Dependencias con versión fija | 0 | **52** |
+| Complejidad ciclomática | sin medir | **524** |
+| Deuda técnica | sin medir | **28 min** |
+| Duplicación de código | sin medir | **0,0 %** |
+| Análisis automático en cada cambio | No | **Sí — 7 verificaciones** |
+
+### Lo que se aprendió por el camino
+
+Los tropiezos fueron tan instructivos como los resultados:
+
+**No se puede auditar lo que no está fijado.** Con dependencias en rango abierto, Snyk no pudo ni empezar. El primer obstáculo llegó antes que cualquier hallazgo.
+
+**El riesgo está en lo que no elegiste.** Las 10 vulnerabilidades estaban en un paquete que nadie escribió jamás en el manifiesto. De 52 dependencias, 44 son heredadas.
+
+**Medir cobertura revela problemas de diseño.** Al intentar probar `arduino_collector.py` apareció que mezclaba siete responsabilidades en una función, con lógica de dominio atrapada tras una conexión física. La deuda se saldó **refactorizando, no ampliando las exclusiones**: el denominador subió de 266 a 295 sentencias y aun así llegó al 100 %.
+
+**Una prueba verde puede no verificar nada.** Ocurrió dos veces en el front: un doble que conservaba llamadas entre pruebas hacía pasar una aserción sobre la invocación equivocada, y unos temporizadores falsos instalados después del arranque dejaban la prueba del refresco automático sin ejercitar el intervalo.
+
+**Configurar un control no es lo mismo que verificarlo.** Cada umbral se comprobó rompiéndolo a propósito antes de darlo por bueno.
 
 ---
 
