@@ -9,7 +9,8 @@ addopts    = "-q --strict-markers"
 # Cobertura de ramas además de líneas — métrica exigida por la sección 4
 # de la Guía de Métricas (JaCoCo/Istanbul reportan lines + branches).
 branch = true
-source = ["src"]
+# src/ = lógica de ML;  api/ = backend HTTP que sirve el front de web/.
+source = ["src", "api"]
 
 # --- Exclusiones de alcance (justificadas en docs/cobertura-alcance.md) ---
 omit = [

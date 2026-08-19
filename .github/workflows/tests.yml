@@ -39,6 +39,15 @@ jobs:
                  --cov-report=xml \
                  --cov-report=html
 
+      # Reutiliza el coverage.xml del paso anterior: no se vuelve a ejecutar pytest.
+      # Requiere el secreto SONAR_TOKEN (Settings → Secrets and variables → Actions)
+      # y que "Automatic Analysis" esté DESACTIVADO en SonarQube Cloud.
+      - name: Análisis de SonarQube Cloud
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
       - name: Publicar cobertura en Codecov
         uses: codecov/codecov-action@v5
         with:
