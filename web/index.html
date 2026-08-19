@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description"
+        content="Panel de predicción de microclima para las 20 localidades de Bogotá D.C.">
+  <title>Microclima Bogotá D.C. — Predicción por Localidad</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/estilos.css">
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <header class="cabecera">
+    <div class="cabecera__marca">
+      <span class="cabecera__logo" aria-hidden="true"></span>
+      <div>
+        <h1 class="cabecera__titulo">Microclima Bogotá D.C.</h1>
+        <p class="cabecera__subtitulo">Predicción de temperatura a 30 minutos por localidad</p>
+      </div>
+    </div>
+    <p class="cabecera__nota">Random Forest sobre 19 variables · datos IoT + histórico simulado</p>
+  </header>
+
+  <div class="disposicion">
+    <aside class="panel" aria-label="Resumen del modelo">
+      <h2 class="panel__titulo">Modelo</h2>
+      <div id="panel-modelo"></div>
+
+      <h2 class="panel__titulo">Colector</h2>
+      <div id="panel-live"></div>
+
+      <h2 class="panel__titulo">Comandos</h2>
+      <ul class="panel__comandos">
+        <li><code>python src/generate_dataset.py</code></li>
+        <li><code>python src/train_model.py</code></li>
+        <li><code>python -m api.server</code></li>
+        <li><code>python src/arduino_collector.py --port COM3 --predict</code></li>
+      </ul>
+    </aside>
+
+    <main class="principal">
+      <nav class="pestanas" id="pestanas" role="tablist" aria-label="Secciones del panel"></nav>
+      <div id="aviso-global" aria-live="polite"></div>
+      <div id="contenido"></div>
+    </main>
+  </div>
+
+  <footer class="pie">
+    <p>Proyecto Microclima ML · Front sin framework (HTML, CSS y JavaScript) sobre API en Python estándar</p>
+  </footer>
+</body>
+</html>

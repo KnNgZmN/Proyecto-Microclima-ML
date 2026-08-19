@@ -489,6 +489,25 @@ La app tiene **4 pestañas** y se refresca automáticamente cada 5 segundos para
 - Indicador de estado del Arduino
 - Comandos rápidos de referencia
 
+### Interfaz alternativa sin framework (HTML + CSS + JavaScript)
+
+Además de Streamlit, el proyecto incluye un front web clásico con las mismas
+cuatro pestañas, servido por una API REST escrita **solo con la biblioteca
+estándar de Python** (`http.server`, sin FastAPI ni Flask):
+
+```bash
+python -m api.server        # http://127.0.0.1:8000
+```
+
+- `web/` — HTML, CSS y JavaScript ES2020 sin librerías externas; las gráficas se
+  dibujan con `<canvas>` en lugar de matplotlib.
+- `api/` — endpoints JSON que reutilizan los mismos módulos de `src/`.
+
+Existe para que **SonarQube pueda analizar también la capa de presentación**:
+con Streamlit toda la interfaz es Python y no hay HTML/CSS/JS que medir.
+Detalles completos, endpoints y decisiones de calidad en
+[`docs/front-web.md`](docs/front-web.md).
+
 ---
 
 ## 11. Integración con Arduino
@@ -547,6 +566,26 @@ ProyectoMicroclima/
 ├── app/
 │   └── streamlit_app.py          # Interfaz web interactiva (4 pestañas)
 │
+├── api/                          # API REST con la biblioteca estándar (sin framework)
+│   ├── config.py                 # Rutas de archivos y constantes
+│   ├── repositorio.py            # Caché de dataset, modelo, métricas y latest.json
+│   ├── servicios.py              # Agregaciones, lectura vigente y predicción
+│   ├── colector.py               # Control del subproceso arduino_collector.py
+│   ├── rutas.py                  # Tabla de endpoints y validación de parámetros
+│   └── server.py                 # Servidor HTTP + archivos estáticos
+│
+├── web/                          # Front sin framework — analizable por SonarQube
+│   ├── index.html                # Estructura de la página (sin JS ni CSS embebido)
+│   ├── css/estilos.css           # Hoja de estilos única
+│   └── js/                       # Módulos ES2020
+│       ├── main.js               # Arranque, pestañas y refresco automático
+│       ├── api.js                # Cliente REST
+│       ├── estado.js             # Estado compartido entre pestañas
+│       ├── dom.js                # Construcción segura de DOM
+│       ├── componentes.js        # Campos, botones, tarjetas e insignias
+│       ├── graficos.js           # Gráficas sobre <canvas>
+│       └── vistas/               # Una pestaña por archivo
+│
 ├── tests/                        # Suite de pruebas — 260 casos
 │   ├── conftest.py               # Fixtures compartidas y doble del modelo
 │   ├── test_data_processing.py   # Saneamiento e interpolación
@@ -556,7 +595,8 @@ ProyectoMicroclima/
 │   └── test_arduino_collector.py # Validación de rangos y persistencia
 │
 ├── docs/
-│   └── cobertura-alcance.md      # Alcance de la medición y exclusiones
+│   ├── cobertura-alcance.md      # Alcance de la medición y exclusiones
+│   └── front-web.md              # Arquitectura del front sin framework y su API
 │
 ├── .github/
 │   └── workflows/

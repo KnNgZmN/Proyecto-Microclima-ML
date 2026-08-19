@@ -1,0 +1,495 @@
+/* ------------------------------------------------------------------
+   Panel de Microclima Bogotá — hoja de estilos única.
+   Paleta oscura con acentos cálidos (temperatura) y fríos (humedad).
+   ------------------------------------------------------------------ */
+
+:root {
+  --fondo: #0d1117;
+  --fondo-panel: #161b22;
+  --fondo-elevado: #1c2330;
+  --borde: #263041;
+  --texto: #e6edf3;
+  --texto-suave: #94a3b8;
+  --acento: #e0642a;
+  --acento-frio: #3d8bfd;
+  --ok: #3fb950;
+  --aviso: #d29922;
+  --error: #f85149;
+  --radio: 10px;
+  --sombra: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+h1, h2, h3 {
+  margin: 0;
+  font-weight: 600;
+}
+
+code {
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12.5px;
+  color: var(--texto-suave);
+}
+
+/* ---------------------------- Cabecera ---------------------------- */
+
+.cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--borde);
+  background: var(--fondo-panel);
+}
+
+.cabecera__marca {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.cabecera__logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(140deg, var(--acento-frio), var(--acento));
+}
+
+.cabecera__titulo {
+  font-size: 19px;
+}
+
+.cabecera__subtitulo,
+.cabecera__nota {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--texto-suave);
+}
+
+/* --------------------------- Disposición --------------------------- */
+
+.disposicion {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 20px;
+  padding: 20px 24px;
+  align-items: start;
+}
+
+.panel {
+  position: sticky;
+  top: 20px;
+  padding: 16px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--fondo-panel);
+}
+
+.panel__titulo {
+  margin: 16px 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--texto-suave);
+}
+
+.panel__titulo:first-of-type {
+  margin-top: 0;
+}
+
+.panel__comandos {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.panel__comandos li {
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  border-radius: 6px;
+  background: var(--fondo-elevado);
+  overflow-wrap: anywhere;
+}
+
+.lista-datos {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.lista-datos dt {
+  color: var(--texto-suave);
+}
+
+.lista-datos dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.principal {
+  min-width: 0;
+}
+
+/* ---------------------------- Pestañas ---------------------------- */
+
+.pestanas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.pestana {
+  padding: 9px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--texto-suave);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.pestana:hover {
+  color: var(--texto);
+}
+
+.pestana--activa {
+  color: var(--texto);
+  border-bottom-color: var(--acento);
+}
+
+.vista[hidden] {
+  display: none;
+}
+
+/* ---------------------------- Secciones ---------------------------- */
+
+.seccion {
+  margin-bottom: 22px;
+}
+
+.seccion__titulo {
+  margin-bottom: 10px;
+  font-size: 15px;
+}
+
+.contexto {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--texto-suave);
+}
+
+.barra-filtros {
+  margin-bottom: 16px;
+  max-width: 320px;
+}
+
+/* ---------------------------- Métricas ---------------------------- */
+
+.rejilla-metricas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.metrica {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--fondo-panel);
+  box-shadow: var(--sombra);
+}
+
+.metrica__etiqueta {
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+.metrica__valor {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+.metrica__detalle {
+  font-size: 12px;
+  color: var(--texto-suave);
+}
+
+/* ---------------------------- Formularios ---------------------------- */
+
+.formulario {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+}
+
+.campo__etiqueta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--texto-suave);
+}
+
+.campo__salida {
+  font-variant-numeric: tabular-nums;
+  color: var(--texto);
+}
+
+.campo__ayuda {
+  font-size: 11.5px;
+  color: var(--texto-suave);
+}
+
+.campo__control {
+  padding: 8px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 7px;
+  background: var(--fondo-elevado);
+  color: var(--texto);
+  font: inherit;
+  font-size: 14px;
+}
+
+.campo__control:focus-visible {
+  outline: 2px solid var(--acento-frio);
+  outline-offset: 1px;
+}
+
+.campo__control--rango {
+  padding: 0;
+  accent-color: var(--acento);
+}
+
+.campo--interruptor {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 8px;
+  align-items: center;
+}
+
+.campo--interruptor .campo__ayuda {
+  grid-column: 1 / -1;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.boton {
+  padding: 9px 15px;
+  border: 1px solid var(--borde);
+  border-radius: 7px;
+  background: var(--fondo-elevado);
+  color: var(--texto);
+  font: inherit;
+  font-size: 14px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.boton:hover {
+  border-color: var(--acento-frio);
+}
+
+.boton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.boton--primario {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: #fff;
+}
+
+.boton--enlace {
+  display: inline-block;
+}
+
+/* ---------------------------- Avisos ---------------------------- */
+
+.aviso {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--texto-suave);
+  border-radius: 6px;
+  background: var(--fondo-panel);
+  font-size: 13.5px;
+}
+
+.aviso--ok {
+  border-left-color: var(--ok);
+}
+
+.aviso--aviso {
+  border-left-color: var(--aviso);
+}
+
+.aviso--error {
+  border-left-color: var(--error);
+}
+
+.aviso--info {
+  border-left-color: var(--acento-frio);
+}
+
+.insignia {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 5px 11px;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  background: var(--fondo-panel);
+  font-size: 13px;
+}
+
+.insignia__punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--texto-suave);
+}
+
+.insignia--vivo .insignia__punto {
+  background: var(--ok);
+}
+
+.insignia--atrasado .insignia__punto {
+  background: var(--aviso);
+}
+
+.insignia--caido .insignia__punto {
+  background: var(--error);
+}
+
+/* ---------------------------- Tablas ---------------------------- */
+
+.tabla-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tabla th,
+.tabla td {
+  padding: 8px 12px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--borde);
+}
+
+.tabla th {
+  position: sticky;
+  top: 0;
+  background: var(--fondo-elevado);
+  color: var(--texto-suave);
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.tabla tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tabla tbody tr:hover {
+  background: var(--fondo-panel);
+}
+
+/* ---------------------------- Gráficas ---------------------------- */
+
+.rejilla-graficos {
+  display: grid;
+  gap: 16px;
+}
+
+.grafico {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--fondo-panel);
+}
+
+.grafico__titulo {
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  color: var(--texto-suave);
+}
+
+.grafico__lienzo {
+  display: block;
+  width: 100%;
+  height: 240px;
+}
+
+.grafico__lienzo--alto {
+  height: 520px;
+}
+
+/* ---------------------------- Pie ---------------------------- */
+
+.pie {
+  padding: 16px 24px 28px;
+  border-top: 1px solid var(--borde);
+  color: var(--texto-suave);
+  font-size: 12.5px;
+}
+
+.pie p {
+  margin: 0;
+}
+
+/* ---------------------------- Responsivo ---------------------------- */
+
+@media (max-width: 900px) {
+  .disposicion {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+
+  .panel {
+    position: static;
+  }
+}
